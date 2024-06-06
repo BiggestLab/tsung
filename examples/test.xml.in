@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<!DOCTYPE tsung SYSTEM "/home/roman/Documents/Erlang/tsung/tsung-1.0.dtd">
+
+<tsung loglevel="notice">
+  <clients>
+    <client host="localhost" use_controller_vm="true" maxusers="10" />
+  </clients>
+  <servers>
+    <server host="localhost" port="4000" type="erlang" />
+  </servers>
+  <load>
+    <arrivalphase phase="1" duration="5" unit="second">
+      <users interarrival="1" unit="second" />
+    </arrivalphase>
+  </load>
+  <sessions>
+    <session name="test_session" probability="100" type="ts_test">
+      <request>
+        <test data="test_test" type="echo">ThisIsTest
+        </test>
+      </request>
+    </session>
+  </sessions>
+</tsung>
