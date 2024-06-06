@@ -16,13 +16,14 @@ add_dynparams(_Bool, _DynData, Param, _HostData) ->
     Param#test_request{}.
 
 get_message(_Server, _SessionData) ->
-    io:format("Received message/2: ~p", [_SessionData]),
-    error_logger:info_msg("Received message/2: ~p", [_SessionData]),
-    {ok,_SessionData}.
+    io:format("Received message/2: ~p, ~p", [_Server, _SessionData]),
+    error_logger:info_msg("Received message/2: ~p, ~p", [_Server, _SessionData]),
+    {<<"">>,_SessionData}.
 
-get_message(#test_request{type=echo, data=Data}) ->
-    io:format("Received message/1: ~p", [Data]),
-    error_logger:info_msg("Received message/1: ~p", [Data]),
+get_message(Msg) ->
+    io:format("Received message/1: ~p", [Msg]),
+    error_logger:info_msg("Received message/1: ~p", [Msg]),
+    #test_request{type=echo, data=Data} = Msg,
     list_to_binary(binary_to_list(<<?ECHO:8>>) ++ Data).
 
 session_defaults() ->
