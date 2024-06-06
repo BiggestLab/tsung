@@ -5,7 +5,7 @@
 
 %% Required exports for ts_plugin behavior
 -export([new/2, destroy/1, run/4, stop/2]).
--export([add_dynparams/4, get_message/2, get_message/1, session_defaults/0, dump/2, parse/2, parse_config/2, decode_buffer/2, new_session/0, parse_bidi/2]).
+-export([add_dynparams/4, get_message/2, session_defaults/0, dump/2, parse/2, parse_config/2, decode_buffer/2, new_session/0, parse_bidi/2]).
 
 %-include_lib("tsung/include/tsung.hrl").
 
@@ -15,16 +15,11 @@
 add_dynparams(_Bool, _DynData, Param, _HostData) ->
     Param#test_request{}.
 
-get_message(_Server, _SessionData) ->
-    io:format("Received message/2: ~p, ~p", [_Server, _SessionData]),
-    error_logger:info_msg("Received message/2: ~p, ~p", [_Server, _SessionData]),
-    {<<"">>,_SessionData}.
-
-get_message(Msg) ->
-    io:format("Received message/1: ~p", [Msg]),
-    error_logger:info_msg("Received message/1: ~p", [Msg]),
-    #test_request{type=echo, data=Data} = Msg,
-    list_to_binary(binary_to_list(<<?ECHO:8>>) ++ Data).
+get_message(Server, SessionData) ->
+    {test_request, echo, _, Msg} = Server,
+    io:format("Received message/2: ~p", [Msg]),
+    error_logger:info_msg("Received message/2: ~p", [Msg]),
+    {list_to_binary(Msg),SessionData}.
 
 session_defaults() ->
     {ok, []}.
