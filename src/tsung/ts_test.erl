@@ -4,7 +4,7 @@
 %% Required callback functions for ts_plugin behavior
 
 %% Required exports for ts_plugin behavior
--export([new/2, destroy/1, run/4, stop/2]).
+-export([new/2, destroy/1, stop/2]).
 -export([add_dynparams/4, get_message/2, session_defaults/0, dump/2, parse/2, parse_config/2, decode_buffer/2, new_session/0, parse_bidi/2]).
 
 %-include_lib("tsung/include/tsung.hrl").
@@ -53,15 +53,6 @@ new(_Server, _SessionData) ->
 %% Destroy the plugin instance
 destroy(_State) ->
     ok.
-
-%% Run the plugin: handle the request and return the same message
-run(_Server, _SessionData, State, _Opts) ->
-    %% Simulate receiving a message and sending it back
-    io:format("Running test module: ~p", [State]),
-    %% Write to debug log
-    error_logger:info_msg("~nRunning test module ~n"),
-    %% Return the message for assertion
-    State.
 
 %% Stop the plugin
 stop(_Server, State) ->
