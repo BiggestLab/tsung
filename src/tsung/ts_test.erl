@@ -22,6 +22,11 @@ get_message(Server, SessionData) ->
     {list_to_binary(Msg),SessionData}.
 
 session_defaults() ->
+    Node = node(),
+    io:format("Tsung Node: ~p", [Node]),
+    TargetNode = 'eventstore@127.0.0.1',
+    Res = net_kernel:connect_node(TargetNode),
+    io:format("Connection to ~p: ~p", [TargetNode, Res]),
     {ok, []}.
 
 dump(_Type, Data) ->
@@ -37,9 +42,12 @@ decode_buffer(_Data, _State) ->
     {ok, _State}.
 
 new_session() ->
+    io:format("New session"),
+    error_logger:info_msg("~nNew session"),
     {ok, []}.
 
 parse_bidi(_Data, _State) ->
+    io:format("parse_bidi: ~p, ~p", [_Data, _State]),
     {nodata, _State, think}.
 
 

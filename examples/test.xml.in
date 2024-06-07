@@ -1,23 +1,24 @@
 <?xml version="1.0"?>
 <!DOCTYPE tsung SYSTEM "/home/roman/Documents/Erlang/tsung/tsung-1.0.dtd">
 
-<tsung loglevel="notice">
+<tsung loglevel="debug">
   <clients>
-    <client host="localhost" use_controller_vm="true" maxusers="10" />
+    <client host="localhost" use_controller_vm="true" maxusers="7" />
   </clients>
     <servers>
         <server host="127.0.0.1" port="4000" type="erlang" />
     </servers>
   <load>
-    <arrivalphase phase="1" duration="5" unit="second">
-      <users interarrival="1" unit="second" />
+    <arrivalphase phase="1" duration="10" unit="second">
+      <users arrivalrate="2" unit="second" />
     </arrivalphase>
   </load>
   <sessions>
     <session name="test_session" probability="100" type="ts_test">
-      <request>
-        <match do="log" when="nomatch" name="Status_ok">ThisIsTest</match>
-        <match do="abort" when="nomatch" name="Status_ok">ThisIsTest</match>
+    <thinktime value="1" />
+      <request subst="true">
+        <match do="log" when="nomatch" name="Status_ok">ok</match>
+        <match do="abort" when="nomatch" name="Status_ok">ok</match>
         <test data="test_test" type="echo">
             ThisIsTest
         </test>
