@@ -4,6 +4,7 @@
         generate_question_start/1,
         generate_student_ans/1,
         generate_question_end/1,
+        generate_game_end/1,
         uuid/1]).
 
 -include("student_ans_statement.hrl").
@@ -11,6 +12,7 @@
 -include("student_joins_game_statement.hrl").
 -include("question_start_statement.hrl").
 -include("question_end_statement.hrl").
+-include("game_end_statement.hrl").
 
 
 generate_teacher_start_game({_Pid, DynData}) ->
@@ -27,6 +29,9 @@ generate_student_ans({_Pid, DynData}) ->
 
 generate_question_end({_Pid, DynData}) ->
     generate_statement(?XAPI_QUESTION_END_STATEMENT, DynData).
+
+generate_game_end({_Pid, DynData}) ->
+    generate_statement(?XAPI_GAME_END_STATEMENT, DynData).
 
 generate_statement(StatementMap, DynData) ->
     RegistrationId = proplists:get_value(registration_id, DynData),
