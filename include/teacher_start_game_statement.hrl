@@ -17,19 +17,24 @@
                                                            <<"I-Challenge">>,
                                                        <<"registration">> =>
                                                            <<"99e1bc42-b55a-4b77-8bff-4221ee6423df">>},
+                                                 <<"extensions">> =>
+                                                     #{<<"https://i-challenge.com/xapistatement/roomoption">> =>
+                                                           #{<<"classRoomDetail">> =>
+                                                                 <<"lrstest">>,
+                                                             <<"shuffleChoice">> =>
+                                                                 false,
+                                                             <<"simulatedStudent">> =>
+                                                                 false,
+                                                             <<"totalQuestions">> =>
+                                                                 <<"5">>}},
                                                  <<"id">> =>
                                                      <<"a1ec8b89-f8a3-4837-87fb-38b974e7571f">>,
                                                  <<"object">> =>
                                                      #{<<"definition">> =>
-                                                           #{<<"description">> =>
-                                                                 #{<<"th">> =>
-                                                                       <<224,184,
-                                                                         155,46,
-                                                                         52,47,49>>},
-                                                             <<"name">> =>
+                                                           #{<<"name">> =>
                                                                  #{<<"en-US">> =>
                                                                        <<>>,
-                                                                   <<"th">> =>
+                                                                   <<"th-TH">> =>
                                                                        <<49,46,
                                                                          224,185,
                                                                          130,224,
@@ -135,4 +140,4 @@
                                                            #{<<"en-US">> =>
                                                                  <<"started">>},
                                                        <<"id">> =>
-                                                           <<"http://adlnet.gov/expapi/verbs/started">>}}).
+                                                           <<"http://adlnet.gov/expapi/verbs/launched">>}}).
