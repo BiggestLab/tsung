@@ -46,7 +46,9 @@
                                                  <<"context">> =>
                                                      #{<<"extensions">> =>
                                                            #{<<"https://ichallenge.dev.idg.aksorn.com/roomoption">> =>
-                                                                 #{<<"ClassRoomDetail">> =>
+                                                                 #{<<"endGameReason">> =>
+                                                                       <<"normal">>,
+                                                                    <<"ClassRoomDetail">> =>
                                                                        <<224,184,
                                                                          155,46,
                                                                          52,47,49>>,

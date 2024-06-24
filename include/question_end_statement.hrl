@@ -45,9 +45,9 @@
                                                            <<"Group">>},
                                                  <<"context">> =>
                                                      #{<<"extensions">> =>
-                                                           #{<<"https://ichallenge.dev.idg.aksorn.com/roomOptions">> =>
+                                                           #{<<"http://aksorn.com/i-challenge/roomOptions">> =>
                                                                  #{<<"EndQuestionType">> =>
-                                                                       <<"timeUp">>}},
+                                                                       <<"studentsAnswer">>}},
                                                        <<"platform">> =>
                                                            <<"I-Challenge">>,
                                                        <<"registration">> =>
