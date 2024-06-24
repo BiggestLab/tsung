@@ -42,7 +42,32 @@ generate_teacher_joins_game({_Pid, DynData}) ->
     generate_statement(UpdatedName, DynData, "teacher").
 
 generate_question_start({_Pid, DynData}) ->
-    generate_statement(?XAPI_QUESTION_START_STATEMENT, DynData).
+    GroupId = proplists:get_value(group_id , DynData),
+    QuestionCounter = proplists:get_value(question_counter, DynData),
+
+    Statement = ?XAPI_QUESTION_START_STATEMENT,
+
+    Actor = maps:get(<<"actor">>, Statement),
+    UpdatedActor = maps:put(<<"name">>, list_to_binary(GroupId), Actor),
+    UpdatedActorName = maps:put(<<"actor">>, UpdatedActor, Statement),
+
+    ObjectId1 = <<"https://ichallenge.dev.idg.aksorn.com/games/โครงสร้างและหน้าที่อวัยวะในระบบหายใจ 1/">>,
+    ObjectId = <<ObjectId1/binary, QuestionCounter/binary>>,
+
+
+    % Gotta update the res and name in correctResponsesPattern
+    Object = maps:get(<<"object">>, Statement),
+    Definition = maps:get(<<"definition">>, Object),
+
+    CorrectResponsesPattern = maps:put(<<"correctResponsesPattern">>, [select_number_from_range(1,4)] , Definition),
+    DefinitionName = maps:put(<<"name">>, #{<<"th">> => list_to_binary(integer_to_list(QuestionCounter))} , CorrectResponsesPattern),
+    
+
+    UpdatedDefinition = maps:put(<<"definition">>, DefinitionName, Object),
+    UpdatedObject = maps:put(<<"id">>, ObjectId, UpdatedDefinition),
+    UpdatedName = maps:put(<<"object">>, UpdatedObject, UpdatedActorName),
+
+    generate_statement(UpdatedName, DynData).
 
 generate_student_ans({_Pid, DynData}) ->
     StudentName = proplists:get_value(student_ans_counter, DynData),
@@ -78,11 +103,14 @@ generate_statement(StatementMap, DynData, Name) ->
     jsx:encode(UpdatedMap).
 
 create_timestamp() ->
-    {Year, Month, Day, Hour, Minute, Second} = calendar:universal_time(),
-    Millisecond = calendar:datetime_to_gregorian_seconds(calendar:universal_time()) rem 1000,
-    Format = "~4..0w-~2..0w-~2..0wT~2..0w:~2..0w:~2..0w.~3..0wZ",
-    Timestamp = io_lib:format(Format, [Year, Month, Day, Hour, Minute, Second, Millisecond]),
-    lists:flatten(Timestamp).
+    %% Get the local time
+    {{YYYY, MM, DD}, {HH, MI, SS}} = erlang:localtime(),
+
+    ISO8601 =
+        io_lib:format("~4..0w-~2..0w-~2..0wT~2..0w:~2..0w:~2..0wZ", [YYYY, MM, DD, HH, MI, SS]),
+
+    %% Convert the formatted date and time to a binary
+    binary_to_list(list_to_binary(ISO8601)).
 
 generate_statement(StatementMap, DynData) ->
     Name = "null",
@@ -92,7 +120,8 @@ uuid({_Pid, _DynData}) ->
     UUID = uuid_cus:to_string(uuid_cus:uuid1()),
     UUID.
 
-    
+select_number_from_range(Min, Max) ->
+    Min + rand:uniform(Max - Min + 1) - 1.
 
 
 
