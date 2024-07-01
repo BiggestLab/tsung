@@ -6,6 +6,7 @@
         generate_student_ans/1,
         generate_question_end/1,
         generate_game_end/1,
+        generate_teacher_launched_game/1,
         uuid/1]).
 
 -include("student_ans_statement.hrl").
@@ -15,15 +16,19 @@
 -include("question_start_statement.hrl").
 -include("question_end_statement.hrl").
 -include("game_end_statement.hrl").
+-include("teacher_launched_game_statement.hrl").
 
 % Module for generating xAPI statements
 
+generate_teacher_launched_game({_Pid, DynData}) ->
+    generate_statement(?XAPI_TEACHER_LAUNCHED_GAME_STATEMENT, DynData, <<"teacher">>).
+
 generate_teacher_start_game({_Pid, DynData}) ->
-    generate_statement(?XAPI_TEACHER_START_GAME_STATEMENT, DynData, "teacher").
+    generate_statement(?XAPI_TEACHER_START_GAME_STATEMENT, DynData, <<"teacher">>).
 
 generate_student_joins_game({_Pid, DynData}) ->
     StudentName = list_to_binary(integer_to_list(proplists:get_value(student_joins_counter, DynData))),
-    GroupId = proplists:get_value(group_id , DynData),
+    GroupId = list_to_binary(proplists:get_value(group_id, DynData)),
 
     Statement = ?XAPI_STUDENT_JOINS_GAME_STATEMENT,
     Object = maps:get(<<"object">>, Statement),
@@ -33,17 +38,17 @@ generate_student_joins_game({_Pid, DynData}) ->
     generate_statement(UpdatedName, DynData, StudentName).
 
 generate_teacher_joins_game({_Pid, DynData}) ->
-    GroupId = proplists:get_value(group_id , DynData),
+    GroupId = list_to_binary(proplists:get_value(group_id, DynData)),
 
     Statement = ?XAPI_TEACHER_JOINS_GAME_STATEMENT,
     Object = maps:get(<<"object">>, Statement),
     UpdatedObject = maps:put(<<"name">>, GroupId, Object),
     UpdatedName = maps:put(<<"object">>, UpdatedObject, Statement),
 
-    generate_statement(UpdatedName, DynData, "teacher").
+    generate_statement(UpdatedName, DynData, <<"teacher">>).
 
 generate_question_start({_Pid, DynData}) ->
-    GroupId = proplists:get_value(group_id , DynData),
+    GroupId = list_to_binary(proplists:get_value(group_id, DynData)),
     QuestionCounter = proplists:get_value(question_counter, DynData),
 
     Statement = ?XAPI_QUESTION_START_STATEMENT,
@@ -52,7 +57,7 @@ generate_question_start({_Pid, DynData}) ->
     ObjectId1 = <<"https://ichallenge.dev.idg.aksorn.com/games/โครงสร้างและหน้าที่อวัยวะในระบบหายใจ 1/">>,
     QuestionCounterB = list_to_binary(integer_to_list(QuestionCounter)), 
     ObjectId = <<ObjectId1/binary, QuestionCounterB/binary>>,
-
+    Utf8Binary = unicode:characters_to_binary(ObjectId, utf8),
 
     % Update definition details
     Object = maps:get(<<"object">>, Statement),
@@ -63,7 +68,7 @@ generate_question_start({_Pid, DynData}) ->
     
 
     UpdatedDefinition = maps:put(<<"definition">>, DefinitionName, Object),
-    UpdatedObject = maps:put(<<"id">>, ObjectId, UpdatedDefinition),
+    UpdatedObject = maps:put(<<"id">>, Utf8Binary, UpdatedDefinition),
     UpdatedName = maps:put(<<"object">>, UpdatedObject, Statement),
 
     generate_statement(UpdatedName, DynData, GroupId).
@@ -78,6 +83,7 @@ generate_student_ans({_Pid, DynData}) ->
     ObjectId1 = <<"https://ichallenge.dev.idg.aksorn.com/games/โครงสร้างและหน้าที่อวัยวะในระบบหายใจ 1/">>,
     QuestionCounterB = list_to_binary(integer_to_list(QuestionCounter)), 
     ObjectId = <<ObjectId1/binary, QuestionCounterB/binary>>,
+    Utf8Binary = unicode:characters_to_binary(ObjectId, utf8),
 
     % Update definition details
     Object = maps:get(<<"object">>, Statement),
@@ -86,14 +92,14 @@ generate_student_ans({_Pid, DynData}) ->
     DefinitionName = maps:put(<<"name">>, #{<<"th">> => list_to_binary(integer_to_list(QuestionCounter))} , Definition),
 
     UpdatedDefinition = maps:put(<<"definition">>, DefinitionName, Object),
-    UpdatedObject = maps:put(<<"id">>, ObjectId, UpdatedDefinition),
+    UpdatedObject = maps:put(<<"id">>, Utf8Binary, UpdatedDefinition),
     UpdatedResult = maps:put(<<"result">>, #{<<"response">> => list_to_binary(integer_to_list(select_number_from_range(1,4)))}, Statement), 
     UpdatedName = maps:put(<<"object">>, UpdatedObject, UpdatedResult),
 
     generate_statement(UpdatedName, DynData, StudentName).
 
 generate_question_end({_Pid, DynData}) ->
-    GroupId = proplists:get_value(group_id , DynData),
+    GroupId = list_to_binary(proplists:get_value(group_id, DynData)),
     QuestionCounter = proplists:get_value(question_counter, DynData),
 
     Statement = ?XAPI_QUESTION_END_STATEMENT,
@@ -102,6 +108,7 @@ generate_question_end({_Pid, DynData}) ->
     ObjectId1 = <<"https://ichallenge.dev.idg.aksorn.com/games/โครงสร้างและหน้าที่อวัยวะในระบบหายใจ 1/">>,
     QuestionCounterB = list_to_binary(integer_to_list(QuestionCounter)), 
     ObjectId = <<ObjectId1/binary, QuestionCounterB/binary>>,
+    Utf8Binary = unicode:characters_to_binary(ObjectId, utf8),
 
     % Update definition details
     Object = maps:get(<<"object">>, Statement),
@@ -110,13 +117,13 @@ generate_question_end({_Pid, DynData}) ->
     DefinitionName = maps:put(<<"name">>, #{<<"th">> => list_to_binary(integer_to_list(QuestionCounter))} , Definition),
 
     UpdatedDefinition = maps:put(<<"definition">>, DefinitionName, Object),
-    UpdatedObject = maps:put(<<"id">>, ObjectId, UpdatedDefinition),
+    UpdatedObject = maps:put(<<"id">>, Utf8Binary, UpdatedDefinition),
     UpdatedName = maps:put(<<"object">>, UpdatedObject, Statement),
 
     generate_statement(UpdatedName, DynData, GroupId).
 
 generate_game_end({_Pid, DynData}) ->
-    GroupId = proplists:get_value(group_id , DynData),
+    GroupId = list_to_binary(proplists:get_value(group_id, DynData)),
     
     generate_statement(?XAPI_GAME_END_STATEMENT, DynData, GroupId).
 
