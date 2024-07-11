@@ -46,7 +46,7 @@
                                                  <<"context">> =>
                                                      #{<<"extensions">> =>
                                                            #{<<"http://aksorn.com/i-challenge/roomOptions">> =>
-                                                                 #{<<"EndQuestionType">> =>
+                                                                 #{<<"endQuestionType">> =>
                                                                        <<"studentsAnswer">>}},
                                                        <<"platform">> =>
                                                            <<"I-Challenge">>,

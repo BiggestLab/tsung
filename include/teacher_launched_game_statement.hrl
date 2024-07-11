@@ -12,7 +12,7 @@
                                                      #{<<"platform">> =>
                                                            <<"I-Challenge">>,
                                                        <<"registration">> =>
-                                                           <<"99e1bc42-b55a-4b77-8bff-4221ee6423df">>},
+                                                           <<"99e1bc42-b55a-4b77-8bff-4221ee6423df">>,
                                                  <<"extensions">> =>
                                                      #{<<"https://i-challenge.com/xapistatement/roomoption">> =>
                                                            #{<<"classRoomDetail">> =>
@@ -42,7 +42,7 @@
                                                               <<"topic">> =>
                                                                  1,
                                                              <<"totalQuestions">> =>
-                                                                 <<"5">>}},
+                                                                 <<"5">>}}},
                                                  <<"id">> =>
                                                      <<"a1ec8b89-f8a3-4837-87fb-38b974e7571f">>,
                                                  <<"object">> =>
