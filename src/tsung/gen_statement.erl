@@ -121,7 +121,7 @@ generate_student_ans({_Pid, DynData}) ->
 
     UpdatedDefinition = maps:put(<<"definition">>, DefinitionName, Object),
     UpdatedObject = maps:put(<<"id">>, Utf8Binary, UpdatedDefinition),
-    UpdatedResult = maps:put(<<"result">>, #{<<"response">> => list_to_binary(integer_to_list(select_number_from_range(1,4)))}, Statement), 
+    UpdatedResult = maps:put(<<"result">>, #{<<"response">> => select_number_from_range(1,4)}, Statement), 
     UpdatedName = maps:put(<<"object">>, UpdatedObject, UpdatedResult),
 
     generate_statement(UpdatedName, DynData, StudentName).
@@ -210,7 +210,10 @@ uuid({_Pid, _DynData}) ->
     UUID.
 
 select_number_from_range(Min, Max) ->
-    Min + rand:uniform(Max - Min + 1) - 1.
+    Number = Min + rand:uniform(Max - Min + 1) - 1,
+    INumber = integer_to_list(Number),
+    list_to_binary(INumber).
+
 
 
 
