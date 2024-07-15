@@ -428,4 +428,4 @@
                                                            #{<<"en-US">> =>
                                                                  <<"initialized">>},
                                                        <<"id">> =>
-                                                           <<"http://adlnet.gov/expapi/verbs/initalized">>}}).
+                                                           <<"http://adlnet.gov/expapi/verbs/initialized">>}}).
