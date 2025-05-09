@@ -55,11 +55,11 @@ sample (F, X, Param, N) ->
     sample(F, [F(Param)|X], Param, N-1 ).
 
 uniform(Min,Max)->
-    Min+random:uniform(Max-Min+1)-1.
+    Min+rand:uniform(Max-Min+1)-1.
 
 %% random sample from an exponential distribution
 exponential(Param) ->
-    -math:log(random:uniform())/Param.
+    -math:log(rand:uniform())/Param.
 
 %% N samples from an exponential distribution
 exponential(Param, N) ->
@@ -67,7 +67,7 @@ exponential(Param, N) ->
 
 %% random sample from a Pareto distribution
 pareto(#pareto{a=A, beta=Beta}) ->
-    A/(math:pow(random:uniform(), 1/Beta)).
+    A/(math:pow(rand:uniform(), 1/Beta)).
 
 %% if a list is given, construct a record for the parameters
 pareto([A, Beta], N) ->
@@ -86,7 +86,7 @@ invgaussian(Param,N) ->
 invgaussian(#invgaussian{mu=Mu, lambda=Lambda}) ->
     Y = Mu*pow(normal(), 2),
     X1 = Mu+Mu*Y/(2*Lambda)-Mu*sqrt(4*Lambda*Y+pow(Y,2))/(2*Lambda),
-    U = random:uniform(),
+    U = rand:uniform(),
     X = (Mu/(Mu+X1))-U,
     case X >=0 of
         true  -> X1;
@@ -114,8 +114,8 @@ normal_boxm(M,S,X1,_X2,W) when W < 1->
     Y1 = X1 * W2,
     M + Y1 * S;
 normal_boxm(M,S,_,_,_W) ->
-    X1 = 2.0 * random:uniform() - 1.0,
-    X2 = 2.0 * random:uniform() - 1.0,
+    X1 = 2.0 * rand:uniform() - 1.0,
+    X2 = 2.0 * rand:uniform() - 1.0,
     normal_boxm(M,S,X1,X2,X1 * X1 + X2 * X2).
 %%%
 

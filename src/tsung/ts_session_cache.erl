@@ -197,7 +197,7 @@ code_change(_OldVsn, State, _Extra) ->
 choose_user_agent(empty) -> {ok, "tsung"};
 choose_user_agent([{_P, Val}]) -> {ok, Val};
 choose_user_agent(UserAgents) ->
-    choose_user_agent(UserAgents, random:uniform(100),0).
+    choose_user_agent(UserAgents, rand:uniform(100),0).
 
 choose_user_agent([{P, Val} | _],Rand, Cur) when Rand =< P+Cur->
     {ok, Val};

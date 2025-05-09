@@ -110,7 +110,7 @@ init(Lines) ->
 %%          {stop, Reason, State}            (terminate/2 is called)
 %%----------------------------------------------------------------------
 handle_call({get_random_line}, _From, State) ->
-    I = random:uniform(State#file.size),
+    I = rand:uniform(State#file.size),
     Reply = {ok, element(I, State#file.items)},
     {reply, Reply, State};
 

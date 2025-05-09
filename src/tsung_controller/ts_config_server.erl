@@ -600,7 +600,7 @@ choose_client_ip(#client{iprange = {A,B,C,D}}) ->
 choose_server([Server], _TotalWeight) ->
     {ok, Server};
 choose_server(Servers, Total) ->
-    choose_server(Servers, random:uniform() * Total, 0).
+    choose_server(Servers, rand:uniform() * Total, 0).
 
 choose_server([S=#server{weight=P} | _],Rand,Cur) when Rand =< P+Cur->
     {ok, S};
@@ -637,9 +637,9 @@ choose_rr(List, Key, _) ->
 choose_session([Session], _Total, _PhaseId) -> %% only one Session
     {ok, Session};
 choose_session(Sessions,Total,PhaseId) when is_number(Total)->
-    choose_session(Sessions, random:uniform() * Total, 0, PhaseId);
+    choose_session(Sessions, rand:uniform() * Total, 0, PhaseId);
 choose_session(Sessions,Total,PhaseId) when is_list(Total) ->
-    choose_session(Sessions, random:uniform() * lists:nth(PhaseId, Total), 0, PhaseId).
+    choose_session(Sessions, rand:uniform() * lists:nth(PhaseId, Total), 0, PhaseId).
 
 choose_session([S=#session{popularity=P} | _],Rand,Cur,_PhaseId) when is_number(P) andalso Rand =< P+Cur->
     {ok, S};

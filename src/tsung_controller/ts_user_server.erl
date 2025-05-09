@@ -277,7 +277,7 @@ handle_call(get_id, _From, State=#state{userid_max = 0}) ->
     % no user defined in the pool, probably we are using usernames from external file (CSV)
     {reply, {error, userid_max_zero }, State};
 handle_call(get_id, _From, State) ->
-    Key = random:uniform( State#state.userid_max ),
+    Key = rand:uniform( State#state.userid_max ),
     {reply, Key, State};
 
 %%Get one id in the users whose have to be connected

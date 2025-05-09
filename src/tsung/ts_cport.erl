@@ -77,7 +77,7 @@ init([]) ->
     {Min, Max} = {?config(cport_min),?config(cport_max)},
     ts_utils:init_seed(),
     %% set random port for the initial value.
-    case catch Min+random:uniform(Max-Min) of
+    case catch Min+rand:uniform(Max-Min) of
         Val when is_integer(Val) ->
             ?LOGF("Ok, starting with ~p value~n",[Val],?NOTICE),
             {ok, #state{min_port=Min, max_port=Max}};

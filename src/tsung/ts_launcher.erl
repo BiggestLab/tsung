@@ -224,7 +224,7 @@ launcher(timeout, State=#launcher{nusers        = Users,
             end;
         error ->
             % retry with the next user, wait randomly a few msec
-            RndWait = random:uniform(?NEXT_AFTER_FAILED_TIMEOUT),
+            RndWait = rand:uniform(?NEXT_AFTER_FAILED_TIMEOUT),
             {next_state,launcher,State#launcher{nusers = Users-1} , RndWait}
     end.
 

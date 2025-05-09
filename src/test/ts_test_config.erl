@@ -122,7 +122,7 @@ config_thinktime2_test() ->
     receive
         {timeout,Ref2,end_thinktime} -> ok
     end,
-    random:seed(), % reinit seed for others tests
+    rand:seed(), % reinit seed for others tests
     ?assertMatch({random,1000}, Req).
 
 read_config_tag_noexclusion_test() ->

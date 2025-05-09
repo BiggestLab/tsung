@@ -276,7 +276,7 @@ do_receive_http_response(State, Socket, Vsn) ->
 
 do_connect(#state{type = Type, host = Host, path = Path, parent_pid = ParentPid} = State, Domain) ->
     ?DebugF("do_connect ~p",[State]),
-    Rid = 1000 + random:uniform(100000),
+    Rid = 1000 + rand:uniform(100000),
     %%Port= proplists:get_value(local_port, Options, undefined),
     NewState = State#state{
             domain = Domain,

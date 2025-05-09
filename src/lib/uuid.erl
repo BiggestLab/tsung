@@ -53,10 +53,10 @@ random_str() ->
 %%
 random() ->
     U = <<
-        (random:uniform(4294967296) - 1):32,
-        (random:uniform(4294967296) - 1):32,
-        (random:uniform(4294967296) - 1):32,
-        (random:uniform(4294967296) - 1):32
+        (rand:uniform(4294967296) - 1):32,
+        (rand:uniform(4294967296) - 1):32,
+        (rand:uniform(4294967296) - 1):32,
+        (rand:uniform(4294967296) - 1):32
     >>,
     format_uuid(U, 4).
 
@@ -66,7 +66,7 @@ random() ->
 %%
 srandom() ->
     {A1,A2,A3} = erlang:now(),
-    random:seed(A1, A2, A3),
+    rand:seed(A1, A2, A3),
     random().
 
 %% @spec sha(Namespace, Name) -> uuid()
@@ -150,10 +150,10 @@ stop() ->
 
 init(Options) ->
     {A1,A2,A3} = proplists:get_value(seed, Options, erlang:now()),
-    random:seed(A1, A2, A3),
+    rand:seed(A1, A2, A3),
     State = #state{
         node = proplists:get_value(node, Options, <<0:48>>),
-        clock_seq = random:uniform(65536)
+        clock_seq = rand:uniform(65536)
     },
     error_logger:info_report("uuid server started"),
     {ok, State}.

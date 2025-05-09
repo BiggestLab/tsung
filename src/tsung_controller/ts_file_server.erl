@@ -151,7 +151,7 @@ handle_call({get_all_lines, FileID}, _From, State) ->
 
 handle_call({get_random_line, FileID}, _From, State) ->
     FileDesc = ?DICT:fetch(FileID, State#state.files),
-    I = random:uniform(FileDesc#file.size),
+    I = rand:uniform(FileDesc#file.size),
     Reply = {ok, element(I, FileDesc#file.items)},
     {reply, Reply, State};
 

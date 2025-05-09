@@ -1,0 +1,29 @@
+name: Integration tests
+
+on:
+  pull_request:
+    branches:
+      - 'develop'
+  push:
+    branches:
+      - 'develop'
+
+jobs:
+  build:
+    name: OTP ${{ matrix.otp_version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    container:
+      image: erlang:${{matrix.otp_version}}
+
+    strategy:
+      matrix:
+        otp_version: ['27', '25', '23']
+        os: [ubuntu-latest]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Configure
+      run: ./configure
+    - name: Build
+      run: make

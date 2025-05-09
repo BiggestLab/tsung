@@ -181,7 +181,7 @@ sub plot_stats {
     open(GP,">$gplotdir/graphes-$datatype.gplot") or die "can't open graphes-$datatype.gplot: $!";
     select GP;
     my @formats = ($imgfmt);
-    if ($allgraph)
+    if ($allgraph) {
         @formats = ("pdf", "png", "ps", "svg");
     }
     push @formats, "tn.png";
