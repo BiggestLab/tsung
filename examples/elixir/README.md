@@ -20,7 +20,7 @@ craft Phoenix Channel messages in the right format:
 ### 1. Start the Phoenix echo server
 
 ```bash
-cd samples/elixir/tsung_echo
+cd examples/elixir/tsung_echo
 mix deps.get
 mix phx.server
 ```
@@ -31,13 +31,13 @@ The server runs on `http://127.0.0.1:4000` with a WebSocket endpoint at
 ### 2. Run the tsung load test
 
 ```bash
-tsung -f samples/elixir/tsung_phoenix_websocket.xml start
+tsung -f examples/elixir/tsung_phoenix_websocket.xml start
 ```
 
 Or for development (from repo root, after `./configure && make`):
 
 ```bash
-./tsung.sh -f $(pwd)/samples/elixir/tsung_phoenix_websocket.xml start
+./tsung.sh -f $(pwd)/examples/elixir/tsung_phoenix_websocket.xml start
 ```
 
 ## How It Works

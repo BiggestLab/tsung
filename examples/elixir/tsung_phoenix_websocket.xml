@@ -9,14 +9,14 @@
     - Must join a channel topic before sending messages
     - Uses text frames (not binary)
 
-  Target: samples/elixir/tsung_echo Phoenix app on port 4000
+  Target: examples/elixir/tsung_echo Phoenix app on port 4000
 
   To run:
     1. Start the Phoenix app:
-       cd samples/elixir/tsung_echo && mix phx.server
+       cd examples/elixir/tsung_echo && mix phx.server
 
     2. Run tsung:
-       tsung -f samples/elixir/tsung_phoenix_websocket.xml start
+       tsung -f examples/elixir/tsung_phoenix_websocket.xml start
 -->
 <tsung loglevel="notice" version="1.0">
 
