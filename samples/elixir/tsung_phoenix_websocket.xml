@@ -1,0 +1,109 @@
+<?xml version="1.0"?>
+<!DOCTYPE tsung SYSTEM "../../tsung-1.0.dtd" []>
+<!--
+  Tsung load test for Phoenix Framework WebSocket Channels.
+
+  Phoenix uses a specific protocol on top of WebSocket (RFC 6455):
+    - Path: /socket/websocket?vsn=2.0.0
+    - Messages are JSON arrays: [join_ref, ref, topic, event, payload]
+    - Must join a channel topic before sending messages
+    - Uses text frames (not binary)
+
+  Target: samples/elixir/tsung_echo Phoenix app on port 4000
+
+  To run:
+    1. Start the Phoenix app:
+       cd samples/elixir/tsung_echo && mix phx.server
+
+    2. Run tsung:
+       tsung -f samples/elixir/tsung_phoenix_websocket.xml start
+-->
+<tsung loglevel="notice" version="1.0">
+
+  <clients>
+    <client host="localhost" use_controller_vm="true" maxusers="500" />
+  </clients>
+
+  <servers>
+    <server host="127.0.0.1" port="4000" type="tcp" />
+  </servers>
+
+  <load>
+    <!-- Phase 1: Ramp up 10 users over 60 seconds -->
+    <arrivalphase phase="1" duration="60" unit="second">
+      <users maxnumber="10" arrivalrate="1" unit="second" />
+    </arrivalphase>
+    <!-- Phase 2: Sustained load -->
+    <arrivalphase phase="2" duration="120" unit="second">
+      <users maxnumber="50" arrivalrate="2" unit="second" />
+    </arrivalphase>
+  </load>
+
+  <sessions>
+    <!--
+      Phoenix Channel WebSocket session.
+
+      Phoenix v2 JSON serializer message format:
+        [join_ref, ref, topic, event, payload]
+
+      Key events:
+        phx_join  - join a channel topic
+        phx_leave - leave a channel topic
+        heartbeat - keepalive (topic must be "phoenix")
+    -->
+    <session name="phoenix_websocket_echo" probability="100" type="ts_websocket">
+
+      <!-- Step 1: WebSocket handshake with Phoenix endpoint -->
+      <request>
+        <websocket type="connect" path="/socket/websocket?vsn=2.0.0"></websocket>
+      </request>
+
+      <thinktime value="1" random="true" />
+
+      <!-- Step 2: Join the echo:lobby channel -->
+      <request>
+        <match do="log" when="nomatch">phx_reply</match>
+        <websocket type="message" frame="text">["1","1","echo:lobby","phx_join",{}]</websocket>
+      </request>
+
+      <thinktime value="1" random="true" />
+
+      <!-- Step 3: Send a ping message and expect pong reply -->
+      <request>
+        <match do="log" when="nomatch">pong</match>
+        <websocket type="message" frame="text">["1","2","echo:lobby","ping",{"data":"hello"}]</websocket>
+      </request>
+
+      <thinktime value="1" random="true" />
+
+      <!-- Step 4: Send an echo message -->
+      <request>
+        <match do="log" when="nomatch">echoed</match>
+        <websocket type="message" frame="text">["1","3","echo:lobby","echo",{"message":"tsung load test"}]</websocket>
+      </request>
+
+      <thinktime value="1" random="true" />
+
+      <!-- Step 5: Phoenix heartbeat (keeps connection alive) -->
+      <request>
+        <websocket type="message" frame="text">[null,"4","phoenix","heartbeat",{}]</websocket>
+      </request>
+
+      <thinktime value="2" random="true" />
+
+      <!-- Step 6: Send another echo to verify continued operation -->
+      <request>
+        <match do="log" when="nomatch">echoed</match>
+        <websocket type="message" frame="text">["1","5","echo:lobby","echo",{"message":"still working"}]</websocket>
+      </request>
+
+      <thinktime value="1" random="true" />
+
+      <!-- Step 7: Close the WebSocket connection -->
+      <request>
+        <websocket type="close"></websocket>
+      </request>
+
+    </session>
+  </sessions>
+</tsung>
