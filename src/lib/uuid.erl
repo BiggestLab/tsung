@@ -65,8 +65,8 @@ random() ->
 %% Seeds random number generation with erlang:now() and generates a random UUID
 %%
 srandom() ->
-    {A1,A2,A3} = erlang:now(),
-    rand:seed(A1, A2, A3),
+    {A1,A2,A3} = erlang:timestamp(),
+    rand:seed(exsss, {A1, A2, A3}),
     random().
 
 %% @spec sha(Namespace, Name) -> uuid()
@@ -150,7 +150,7 @@ stop() ->
 
 init(Options) ->
     {A1,A2,A3} = proplists:get_value(seed, Options, erlang:now()),
-    rand:seed(A1, A2, A3),
+    rand:seed(exsss, {A1, A2, A3}),
     State = #state{
         node = proplists:get_value(node, Options, <<0:48>>),
         clock_seq = rand:uniform(65536)
