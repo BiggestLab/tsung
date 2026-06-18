@@ -36,7 +36,7 @@
 
 %%--------------------------------------------------------------------
 %% External exports
--export([start/0, dump/1]).
+-export([start/0, dump/1, sendmsg/1, rcvmsg/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -69,6 +69,17 @@ start() ->
 %%--------------------------------------------------------------------
 dump({_Type, Who, What})  ->
     gen_server:cast(?MODULE, {dump, Who, ?TIMESTAMP, What}).
+
+%%--------------------------------------------------------------------
+%% Function: sendmsg/1, rcvmsg/1
+%% Description: API for light_local dumptraffic mode -- writes a one-line
+%%              summary per send/recv to this slave's local dump file.
+%%--------------------------------------------------------------------
+sendmsg({Who, When, What}) ->
+    gen_server:cast(?MODULE, {sendmsg, Who, When, What}).
+
+rcvmsg({Who, When, What}) ->
+    gen_server:cast(?MODULE, {rcvmsg, Who, When, What}).
 
 %%====================================================================
 %% Server functions
@@ -128,6 +139,24 @@ handle_cast(_, State=#state{dump_iodev=undefined}) ->
 
 handle_cast({dump, Who, When, What}, State=#state{dump_iodev=IODev}) ->
     Data = io_lib:format("~w;~w;~s~n",[ts_utils:time2sec_hires(When),Who,What]),
+    file:write(IODev,Data),
+    {noreply, State};
+
+handle_cast({sendmsg, Who, When, What}, State=#state{dump_iodev=IODev}) when is_binary(What) ->
+    Data = io_lib:format("Send:~w:~w:~-44s~n",[ts_utils:time2sec_hires(When),Who,binary_to_list(What)]),
+    file:write(IODev,Data),
+    {noreply, State};
+handle_cast({sendmsg, Who, When, What}, State=#state{dump_iodev=IODev}) ->
+    Data = io_lib:format("Send:~w:~w:~-44p~n",[ts_utils:time2sec_hires(When),Who,What]),
+    file:write(IODev,Data),
+    {noreply, State};
+
+handle_cast({rcvmsg, Who, When, What}, State=#state{dump_iodev=IODev}) when is_binary(What) ->
+    Data = io_lib:format("Recv:~w:~w:~-44s~n",[ts_utils:time2sec_hires(When),Who,binary_to_list(What)]),
+    file:write(IODev,Data),
+    {noreply, State};
+handle_cast({rcvmsg, Who, When, What}, State=#state{dump_iodev=IODev}) ->
+    Data = io_lib:format("Recv:~w:~w:~-44p~n",[ts_utils:time2sec_hires(When),Who,What]),
     file:write(IODev,Data),
     {noreply, State};
 

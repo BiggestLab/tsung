@@ -122,12 +122,17 @@ endclient({Who, When, Elapsed}) ->
 sendmes({none, _, _})       -> skip;
 sendmes({protocol, _, _})   -> skip;
 sendmes({protocol_local, _, _})   -> skip;
+sendmes({light_local, Who, What}) ->
+    ts_local_mon:sendmsg({Who, ?TIMESTAMP, What});
 sendmes({_Type, Who, What}) ->
     gen_server:cast({global, ?MODULE}, {sendmsg, Who, ?TIMESTAMP, What}).
 
 rcvmes({none, _, _})    -> skip;
 rcvmes({protocol, _, _})-> skip;
 rcvmes({protocol_local, _, _})-> skip;
+rcvmes({light_local, _, closed})  -> skip;
+rcvmes({light_local, Who, What})  ->
+    ts_local_mon:rcvmsg({Who, ?TIMESTAMP, What});
 rcvmes({_, _, closed})  -> skip;
 rcvmes({_Type, Who, What})  ->
     gen_server:cast({global, ?MODULE}, {rcvmsg, Who, ?TIMESTAMP, What}).

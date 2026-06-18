@@ -100,6 +100,7 @@ parse(Element = #xmlElement{parents = [], attributes=Attrs}, Conf=#config{}) ->
                    "false" -> none;
                    "true"  -> full;
                    "light" -> light;
+                   "light_local" -> light_local;
                    "protocol" -> protocol;
                    "protocol_local" -> protocol_local
                end,
