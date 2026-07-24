@@ -59,16 +59,30 @@
 %%% @doc:  read and parse the xml config file
 %%% @end
 %%%----------------------------------------------------------------------
+%% @doc DTD search path used to resolve the DOCTYPE.
+%% xmerl resolves the DTD through fetch_path, NOT through the SYSTEM identifier
+%% written in the config file, so hardcoding /usr/share/tsung means a tsung
+%% installed under a custom --prefix silently validates against whatever
+%% tsung-1.0.dtd a distro package happens to have left in /usr/share --
+%% rejecting attributes this build legitimately supports. The tsung launcher
+%% exports TSUNG_DTD_DIR from @EXPANDED_SHAREDIR@; fall back to the old list.
+dtd_path() ->
+    case os:getenv("TSUNG_DTD_DIR") of
+        false -> ["/usr/share/tsung/", "./"];
+        ""    -> ["/usr/share/tsung/", "./"];
+        Dir   -> [Dir ++ "/", "/usr/share/tsung/", "./"]
+    end.
+
 read(Filename=standard_io, LogDir) ->
     ?LOG("Reading config file from stdin~n", ?NOTICE),
     XML = read_stdio(),
     handle_read(catch xmerl_scan:string(XML,
-                                      [{fetch_path,["/usr/share/tsung/","./"]},
+                                      [{fetch_path,dtd_path()},
                                        {validation,true}]),Filename,LogDir);
 read(Filename, LogDir) ->
     ?LOGF("Reading config file: ~s~n", [Filename], ?NOTICE),
     Result = handle_read(catch xmerl_scan:file(Filename,
-                                               [{fetch_path,["/usr/share/tsung/","./"]},
+                                               [{fetch_path,dtd_path()},
                                                 {validation,true}]),Filename,LogDir),
     %% In case of error we reparse the file with xmerl_sax_parser:file/2 to obtain
     %% a more verbose output
@@ -770,7 +784,16 @@ parse(Element=#xmlElement{name=match,attributes=Attrs},
     MaxLoop    = getAttr(integer, Attrs, max_loop, 20),
     LoopBack   = getAttr(integer, Attrs, loop_back, 0),
     MaxRestart = getAttr(integer, Attrs, max_restart, 3),
-    SleepLoop  = getAttr(integer, Attrs, sleep_loop, 5),
+    %% sleep_loop accepts fractional seconds (e.g. "0.05"). An integer-only
+    %% backoff forces a >=1s stall per retry, which at a high shed rate burns
+    %% most of the generator's user-time sleeping and throttles offered load
+    %% well below the server's capacity. float_or_integer keeps "1" meaning
+    %% one second, so existing configs are unaffected.
+    SleepLoop  = getAttr(float_or_integer, Attrs, sleep_loop, 5),
+    %% ... and an optional unit, following the same idiom as <load> and
+    %% <arrivalphase>, so a sub-second backoff can be written readably as
+    %% sleep_loop="50" unit="millisecond" instead of sleep_loop="0.05".
+    SleepUnit  = getAttr(string, Attrs, unit, "second"),
     ValRaw     = getText(Element#xmlElement.content),
     RegExp     = ts_utils:clean_str(ValRaw),
     SkipHeaders = getAttr(atom, Attrs, skip_headers, no),
@@ -781,7 +804,10 @@ parse(Element=#xmlElement{name=match,attributes=Attrs},
                       {list_to_atom(Mod), list_to_atom(Fun)}
               end,
     NewMatch   = #match{regexp=RegExp,subst=Subst, do=Do,'when'=When, name=Name,
-                        sleep_loop=SleepLoop * 1000, skip_headers=SkipHeaders,
+                        %% stored in milliseconds; round/1 because timer:sleep/1
+                        %% requires an integer and SleepLoop may now be a float.
+                        sleep_loop=round(to_milliseconds(SleepUnit, SleepLoop)),
+                        skip_headers=SkipHeaders,
                         loop_back=LoopBack, max_restart=MaxRestart, max_loop=MaxLoop, apply_to_content=ApplyTo},
 
     lists:foldl(fun parse/2,

@@ -15,6 +15,12 @@ case $UNAME in
 esac
 
 INSTALL_DIR=@EXPANDED_LIBDIR@/tsung
+# Tell the controller where THIS installation's DTD lives. xmerl resolves the
+# DOCTYPE via fetch_path rather than the SYSTEM identifier in the config file,
+# so without this a tsung installed under a custom --prefix would validate
+# against whatever tsung-1.0.dtd a distro package left in /usr/share/tsung.
+TSUNG_DTD_DIR=@EXPANDED_SHAREDIR@
+export TSUNG_DTD_DIR
 ERL=@ERL@
 MAIN_DIR=$HOME/.tsung
 LOG_DIR=$MAIN_DIR/log
