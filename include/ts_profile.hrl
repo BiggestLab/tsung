@@ -31,7 +31,9 @@
          'when' = false,
 		  name,
           do    = continue, %(continue | loop | abort | log )
-          sleep_loop,       % in seconds
+          sleep_loop,       % in MILLISECONDS (ts_config multiplies the
+                            % configured value by its unit; ts_search passes
+                            % this straight to timer:sleep/1)
           apply_to_content,
           skip_headers = no,
           max_loop,

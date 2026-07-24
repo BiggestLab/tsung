@@ -187,6 +187,7 @@ repeat | if | change_type | foreach | set_option | interaction | abort )*>
     max_loop    NMTOKEN "20"
     max_restart NMTOKEN "3"
     sleep_loop  NMTOKEN "5"
+    unit (hour | minute | second | millisecond) "second"
     apply_to_content  NMTOKEN "undefined"
     skip_headers      NMTOKEN "no"
     >
