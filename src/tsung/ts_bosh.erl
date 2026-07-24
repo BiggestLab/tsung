@@ -33,7 +33,12 @@
 
 -include("ts_profile.hrl").
 -include("ts_config.hrl").
--include_lib("xmerl/include/xmerl.hrl").
+%% Use the vendored include/xmerl.hrl (resolved via the Makefile's -I ./include)
+%% rather than include_lib. Distro erlang packages (e.g. Ubuntu erlang-xmerl)
+%% ship xmerl's ebin WITHOUT its include/ dir, so include_lib fails to resolve
+%% and every xmlElement/xmlAttribute record here is undefined. ts_config.erl
+%% already uses the plain -include("xmerl.hrl") form for the same reason.
+-include("xmerl.hrl").
 
 -define(CONTENT_TYPE, "text/xml; charset=utf-8").
 -define(VERSION, "1.8").

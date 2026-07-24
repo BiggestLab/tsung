@@ -25,7 +25,10 @@
 
 -export([signature/2, verify/3]).
 
--include_lib("public_key/include/public_key.hrl").
+%% Vendored into include/ (with its generated OTP-PUB-KEY.hrl / PKCS-FRAME.hrl
+%% companions) because distro erlang packages ship public_key's ebin without an
+%% include/ dir, so include_lib cannot resolve it. Same reason as xmerl.hrl.
+-include("public_key.hrl").
 
 -spec signature(string(), string()) -> string().
 signature(BaseString, PrivateKeyPath) ->
