@@ -823,6 +823,30 @@ parse(Element=#xmlElement{name=match,attributes=Attrs},
     %% <arrivalphase>, so a sub-second backoff can be written readably as
     %% sleep_loop="50" unit="millisecond" instead of sleep_loop="0.05".
     SleepUnit  = getAttr(string, Attrs, unit, "second"),
+    %% Optional server-directed backoff. sleep_loop is fixed when the config is
+    %% read, so a test can only guess how long the server wants to be left
+    %% alone; sleep_var names a dynvar (typically captured with
+    %% <dyn_variable header="retry-after"/>) whose value overrides that guess at
+    %% runtime. Empty means "not set" -- list_to_atom("") would otherwise create
+    %% a '' variable name that can never be looked up.
+    SleepVar   = case getAttr(string, Attrs, sleep_var, "") of
+                     ""  -> undefined;
+                     Var -> list_to_atom(Var)
+                 end,
+    %% The dynvar carries a bare number, so its unit has to be declared
+    %% separately from sleep_loop's: Retry-After is seconds even when the static
+    %% fallback is written in milliseconds. Stored as a millisecond multiplier
+    %% because ts_search runs on client nodes, which do not load the controller
+    %% application and so cannot call to_milliseconds/2 themselves.
+    SleepVarUnit = getAttr(string, Attrs, sleep_var_unit, "second"),
+    %% Ceiling on the sleep_var-derived backoff. Without it a server answering
+    %% `Retry-After: 3600' parks the virtual user for an hour, which looks like
+    %% a hung run rather than a bad response. Always in SECONDS, deliberately
+    %% not in sleep_var_unit: a wall-clock safety bound must not change meaning
+    %% with the unit of the value it is bounding, or a scenario reading a
+    %% millisecond delay would silently inherit a 60ms ceiling and clamp
+    %% everything it was given.
+    SleepMax   = getAttr(float_or_integer, Attrs, sleep_max, 60),
     ValRaw     = getText(Element#xmlElement.content),
     RegExp     = ts_utils:clean_str(ValRaw),
     SkipHeaders = getAttr(atom, Attrs, skip_headers, no),
@@ -836,6 +860,9 @@ parse(Element=#xmlElement{name=match,attributes=Attrs},
                         %% stored in milliseconds; round/1 because timer:sleep/1
                         %% requires an integer and SleepLoop may now be a float.
                         sleep_loop=round(to_milliseconds(SleepUnit, SleepLoop)),
+                        sleep_var=SleepVar,
+                        sleep_var_unit=round(to_milliseconds(SleepVarUnit, 1)),
+                        sleep_max=round(to_milliseconds("second", SleepMax)),
                         skip_headers=SkipHeaders,
                         loop_back=LoopBack, max_restart=MaxRestart, max_loop=MaxLoop, apply_to_content=ApplyTo},
 

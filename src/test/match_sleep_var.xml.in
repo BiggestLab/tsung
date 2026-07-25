@@ -1,0 +1,51 @@
+<?xml version="1.0"?>
+<!DOCTYPE tsung SYSTEM "@prefix@/share/@PACKAGE_NAME@/@DTD@">
+<!-- Exercises the server-directed loop backoff. sleep_loop is fixed when this
+     file is read, so it can only guess how long a shedding server wants to be
+     left alone; sleep_var lets a Retry-After captured from the response decide
+     instead, bounded by sleep_max. -->
+<tsung loglevel="notice" version="1.0">
+  <clients>
+    <client host="localhost" use_controller_vm="true"/>
+  </clients>
+
+  <servers>
+    <server host="localhost" port="8000" type="tcp"/>
+  </servers>
+
+  <load>
+    <arrivalphase phase="1" duration="1" unit="minute">
+      <users interarrival="1" unit="second"/>
+    </arrivalphase>
+  </load>
+
+  <sessions>
+    <session name="retry" probability="100" type="ts_http">
+      <!-- honour Retry-After, falling back to a 50ms static backoff -->
+      <request subst="true">
+        <dyn_variable name="ra" header="retry-after"/>
+        <match do="loop" when="match" loop_back="0"
+               sleep_loop="50" unit="millisecond"
+               sleep_var="ra" sleep_var_unit="second" sleep_max="30"
+               max_loop="20">retry-after</match>
+        <http url="/dynamic" method="POST" version="1.1" contents="x"/>
+      </request>
+
+      <!-- no sleep_var: the pre-existing static behaviour must be untouched -->
+      <request>
+        <match do="loop" when="match" sleep_loop="2"
+               max_loop="3">busy</match>
+        <http url="/static" method="GET" version="1.1"/>
+      </request>
+
+      <!-- sleep_max is left out: it defaults to 60 seconds whatever
+           sleep_var_unit says -->
+      <request>
+        <match do="loop" when="match" sleep_loop="1" unit="second"
+               sleep_var="wait" sleep_var_unit="millisecond"
+               max_loop="3">slow</match>
+        <http url="/defaults" method="GET" version="1.1"/>
+      </request>
+    </session>
+  </sessions>
+</tsung>

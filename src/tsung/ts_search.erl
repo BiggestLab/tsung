@@ -34,6 +34,10 @@
 
 -export([subst/2, match/5, parse_dynvar/2, parse_dynvar/3]).
 
+%% exported for unit tests only: the loop backoff is pure and worth pinning
+%% independently of the timer:sleep/1 it feeds.
+-export([loop_sleep/2]).
+
 -include("ts_macros.hrl").
 -include("ts_profile.hrl").
 
@@ -161,19 +165,19 @@ match([Match=#match{regexp=RawRegExp,subst=Subst, do=Action, 'when'=When}
             ?LOGF("Ok Match (regexp=~p) do=~p~n",[RegExp,Action], ?INFO),
             case Action of
                 Act when Act =:= 'continue'; Act =:= 'log'; Act =:= 'dump' ->
-                    setcount(Match, Counts, [{count, match}| Stats], Data, Tr),
+                    setcount(Match, Counts, [{count, match}| Stats], Data, DynVars, Tr),
                     match(Tail, Data, Counts, Stats,DynVars, Tr);
                 _       ->
-                    setcount(Match, Counts, [{count, match}| Stats], Data, Tr)
+                    setcount(Match, Counts, [{count, match}| Stats], Data, DynVars, Tr)
             end;
         When -> % nomatch
             ?LOGF("Bad Match (regexp=~p) do=~p~n",[RegExp, Action], ?INFO),
             case Action of
                 Act when Act =:= 'continue'; Act =:= 'log'; Act =:= 'dump' ->
-                    setcount(Match, Counts, [{count, nomatch}| Stats], Data, Tr),
+                    setcount(Match, Counts, [{count, nomatch}| Stats], Data, DynVars, Tr),
                     match(Tail, Data, Counts, Stats,DynVars, Tr);
                 _       ->
-                    setcount(Match, Counts, [{count, nomatch}| Stats], Data, Tr)
+                    setcount(Match, Counts, [{count, nomatch}| Stats], Data, DynVars, Tr)
             end;
         {match,_} -> % match but when=nomatch
             ?LOGF("Ok Match (regexp=~p)~n",[RegExp], ?INFO),
@@ -194,23 +198,25 @@ match([Match=#match{regexp=RawRegExp,subst=Subst, do=Action, 'when'=When}
     end.
 
 %%----------------------------------------------------------------------
-%% Func: setcount/3
-%% Args:  #match, Counts, Stats
+%% Func: setcount/6
+%% Args:  #match, Counts, Stats, Data, DynVars, Transaction
 %% Update the request counter after a match:
 %%   - if loop is true, we must start again the same request, so add 1 to count
 %%   - if restart is true, we must start again the whole session, set count to MaxCount
 %%   - if stop is true, set count to 0
+%% DynVars is threaded in for the loop backoff only: the dynvars of the
+%% response we just matched are what carries a server-directed Retry-After.
 %%----------------------------------------------------------------------
-setcount(#match{do=continue}, {Count, _MaxC, _SessionId, _UserId}, Stats,_,_)->
+setcount(#match{do=continue}, {Count, _MaxC, _SessionId, _UserId}, Stats,_,_,_)->
     ts_mon_cache:add(Stats),
     Count;
-setcount(#match{do=log, name=Name}, {Count, MaxC, SessionId, UserId}, Stats,_,Tr)->
+setcount(#match{do=log, name=Name}, {Count, MaxC, SessionId, UserId}, Stats,_,_,Tr)->
     ts_mon_cache:add_match(Stats,{UserId,SessionId,MaxC-Count,Tr, Name}),
     Count;
-setcount(#match{do=dump, name=Name}, {Count, MaxC, SessionId, UserId}, Stats, Data, Tr)->
+setcount(#match{do=dump, name=Name}, {Count, MaxC, SessionId, UserId}, Stats, Data, _, Tr)->
     ts_mon_cache:add_match(Stats,{UserId,SessionId,MaxC-Count, Data, Tr, Name}),
     Count;
-setcount(#match{do=restart, max_restart=MaxRestart, name=Name}, {Count, MaxC,SessionId,UserId}, Stats,_, Tr)->
+setcount(#match{do=restart, max_restart=MaxRestart, name=Name}, {Count, MaxC,SessionId,UserId}, Stats,_,_, Tr)->
     CurRestart = get(restart_count),
     Ids={UserId,SessionId,MaxC-Count,Tr,Name},
     ?LOGF("Restart on (no)match ~p~n",[CurRestart], ?INFO),
@@ -228,10 +234,11 @@ setcount(#match{do=restart, max_restart=MaxRestart, name=Name}, {Count, MaxC,Ses
             ts_mon_cache:add_match([{count, match_restart} | Stats],Ids),
             MaxC
     end;
-setcount(#match{do=loop,loop_back=Back,max_loop=MaxLoop,sleep_loop=Sleep},{Count,_MaxC,_SessionId,_UserId},Stats,_,_)->
+setcount(Match=#match{do=loop,loop_back=Back,max_loop=MaxLoop},{Count,_MaxC,_SessionId,_UserId},Stats,_,DynVars,_)->
     CurLoop = get(loop_count),
     ?LOGF("Loop on (no)match ~p~n",[CurLoop], ?INFO),
     ts_mon_cache:add([{count, match_loop} | Stats]),
+    Sleep = loop_sleep(Match, DynVars),
     case CurLoop of
         undefined ->
             put(loop_count,1),
@@ -246,15 +253,108 @@ setcount(#match{do=loop,loop_back=Back,max_loop=MaxLoop,sleep_loop=Sleep},{Count
             timer:sleep(Sleep),
             Count + 1 + Back
     end;
-setcount(#match{do=abort,name=Name}, {Count,MaxC,SessionId,UserId}, Stats,_, Tr) ->
+setcount(#match{do=abort,name=Name}, {Count,MaxC,SessionId,UserId}, Stats,_,_, Tr) ->
     ts_mon_cache:add_match([{count, match_stop} | Stats],{UserId,SessionId,MaxC-Count,Tr, Name}),
     0;
-setcount(#match{do=abort_test,name=Name}, {Count,MaxC,SessionId,UserId}, Stats,_, Tr) ->
+setcount(#match{do=abort_test,name=Name}, {Count,MaxC,SessionId,UserId}, Stats,_,_, Tr) ->
     ?LOG("OK match, aborting the whole test by request !!!~n", ?EMERG),
     ts_mon_cache:add_match([{count, match_stop_test} | Stats],{UserId,SessionId,MaxC-Count,Tr, Name}),
     timer:sleep(?CACHE_DUMP_STATS_INTERVAL),
     ts_config_server:stop(),
     0.
+
+%%----------------------------------------------------------------------
+%% @spec loop_sleep(Match::#match{}, DynVars::term()) -> Millisec::integer()
+%% @doc How long to wait before replaying a looping request. sleep_loop is
+%%      decided when the config is read, so it can only ever be a guess at how
+%%      long the server wants to be left alone; when the scenario names a
+%%      sleep_var, a delay captured from the response (RFC 9110 Retry-After,
+%%      say) replaces that guess. The static value stays the fallback rather
+%%      than a last resort: the successful response that ends the retry loop
+%%      carries no Retry-After at all, so "no usable value" is the common case
+%%      and must be cheap and silent.
+%% @end
+%%----------------------------------------------------------------------
+loop_sleep(#match{sleep_loop=Sleep, sleep_var=undefined}, _DynVars) ->
+    Sleep;
+loop_sleep(#match{sleep_loop=Sleep, sleep_var=Var, sleep_var_unit=Unit, sleep_max=Max}, DynVars) ->
+    case ts_dynvars:lookup(Var, DynVars) of
+        {ok, Value} ->
+            case to_delay(Value) of
+                {ok, Delay} ->
+                    bound_sleep(round(Delay * Unit), Sleep, Max, Var);
+                error ->
+                    ?LOGF("Loop sleep: dynvar ~p is not a delay (~p), using sleep_loop~n",
+                          [Var, Value], ?INFO),
+                    Sleep
+            end;
+        false ->
+            ?LOGF("Loop sleep: no dynvar ~p, using sleep_loop~n",[Var], ?INFO),
+            Sleep
+    end.
+
+%% A server is entitled to ask for far more patience than a load test has; obey
+%% it up to the configured ceiling and no further, and say so, because an
+%% unexplained multi-minute gap in the arrival rate is otherwise indistinguishable
+%% from a wedged generator.
+bound_sleep(Millisec, _Sleep, Max, Var) when Millisec > Max ->
+    ?LOGF("Loop sleep: ~p asked for ~pms, clamped to sleep_max=~pms~n",
+          [Var, Millisec, Max], ?WARN),
+    erlang:max(1, Max);
+%% `Retry-After: 0' (or anything that rounds down to nothing) means "come back
+%% at once"; taken literally that is a busy spin which burns the virtual user's
+%% scheduler time and piles more load onto a server that is already shedding.
+%% Fall back to the static backoff, which is the author's declared floor.
+bound_sleep(Millisec, Sleep, _Max, _Var) when Millisec =< 0 ->
+    erlang:max(1, Sleep);
+bound_sleep(Millisec, _Sleep, _Max, _Var) ->
+    Millisec.
+
+%% Retry-After is delta-seconds or an HTTP-date (RFC 9110 10.2.3). Only
+%% delta-seconds is honoured: turning a date into a delay means trusting the
+%% client clock against the server's, and a skewed clock silently degrades into
+%% either a hot retry loop (date already past) or a stall, neither of which is
+%% visible in the results. A date therefore falls back to sleep_loop, which is
+%% always safe. Fractions are accepted although the RFC does not mint them --
+%% the whole point of this fork's sub-second sleep_loop is that a 1s granularity
+%% throttles the generator well below the server's capacity.
+%% Values reach us as whatever the dynvar backend produced (binary from a
+%% regexp, string from a header, `undefined' when the header was absent), so
+%% every shape has to be tolerated rather than crash the virtual user.
+to_delay(Int) when is_integer(Int) ->
+    {ok, Int};
+to_delay(Float) when is_float(Float) ->
+    {ok, Float};
+to_delay(Bin) when is_binary(Bin) ->
+    to_delay(binary_to_list(Bin));
+to_delay(Str) when is_list(Str) ->
+    try
+        case string:strip(Str) of
+            []      -> error;
+            Trimmed -> to_number(Trimmed)
+        end
+    catch
+        _:_ -> error
+    end;
+to_delay(_Other) ->
+    error.
+
+%% Strict: the whole string must be the number, so an HTTP-date starting with a
+%% weekday is rejected outright instead of being half-parsed into a bogus delay.
+to_number(Str) ->
+    try
+        case string:to_integer(Str) of
+            {Int, []} when is_integer(Int) ->
+                {ok, Int};
+            _ ->
+                case string:to_float(Str) of
+                    {Float, []} when is_float(Float) -> {ok, Float};
+                    _                                -> error
+                end
+        end
+    catch
+        _:_ -> error
+    end.
 
 %%----------------------------------------------------------------------
 %% @spec parse_dynvar(Dynvarspecs::list(), Data::binary | list) -> dynvars()

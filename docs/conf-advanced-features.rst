@@ -593,6 +593,37 @@ You can also use dynamic variables, using the **subst** attribute:
    <match do='log' when='nomatch' subst='true' >%%_myvar%%</match>
    <http url="/" method="GET"/>
 
+.. index:: sleep_var
+.. index:: sleep_var_unit
+.. index:: sleep_max
+
+A **loop** backoff can also be taken from the server's own answer instead of
+being fixed in the configuration file. **sleep_var** names a dynamic variable
+holding the delay to wait; the usual source is a ``Retry-After`` header
+captured with a **dyn_variable**. **sleep_var_unit** declares the unit of that
+value (default **second**), and **sleep_max** caps it, in seconds, at 60 by
+default:
+
+.. code-block:: xml
+
+   <request subst="true">
+     <dyn_variable name="ra" header="retry-after"/>
+     <match do="loop" when="match" loop_back="0"
+            sleep_loop="50" unit="millisecond"
+            sleep_var="ra" sleep_var_unit="second" sleep_max="30"
+            max_loop="20">retry-after</match>
+     <http url="/publish" method="POST" version="1.1" contents="..."/>
+   </request>
+
+**sleep_loop** stays the fallback and is used whenever the variable is unset,
+empty, or is not a plain number: the successful response that ends the retry
+loop carries no ``Retry-After`` at all, so that is the normal case rather than
+an error. Only the ``delta-seconds`` form of ``Retry-After`` is honoured; an
+HTTP-date falls back to **sleep_loop**, because turning a date into a delay
+means trusting the load generator's clock against the server's. A value that
+rounds down to zero or below also falls back, so a server asking to be retried
+immediately cannot turn the loop into a busy spin.
+
 
 **Since 1.5.0**, it's now possible to add **name** attribute in **match** tag to name a record printed in match.log as follow:
 
