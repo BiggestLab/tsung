@@ -62,7 +62,8 @@
           port,       % tcp port of munin-node server
           host,       % remote munin-node hostname
           addr,       % remote munin-node IP addr
-          ncpus       % number of cpus of remote server
+          ncpus,      % number of cpus of remote server
+          plugins=[]  % extra munin plugins to fetch (e.g. ["if_eth0","diskstats"])
          }).
 
 start(Args) ->
@@ -78,10 +79,15 @@ start(Args) ->
 %%          {stop, Reason}
 %%--------------------------------------------------------------------
 init({HostStr, {Port}, Interval, MonServer}) ->
-    ?LOGF("Starting munin mgr on ~p:~p~n", [HostStr,Port], ?DEB),
+    %% kept for backward compatibility with configs/callers that pass no plugins
+    init({HostStr, {Port, []}, Interval, MonServer});
+init({HostStr, {Port, Plugins}, Interval, MonServer}) ->
+    ?LOGF("Starting munin mgr on ~p:~p (extra plugins: ~p)~n",
+          [HostStr,Port,Plugins], ?DEB),
     {ok, IP} = inet:getaddr(HostStr, inet),
     erlang:start_timer(?INIT_WAIT, self(), connect ),
-    {ok, #state{mon=MonServer, host=HostStr, interval=Interval, addr=IP, port=Port}}.
+    {ok, #state{mon=MonServer, host=HostStr, interval=Interval, addr=IP,
+                port=Port, plugins=Plugins}}.
 
 
 %%--------------------------------------------------------------------
@@ -164,8 +170,9 @@ handle_info({timeout, _Ref, ping},  State=#state{socket=Socket} ) ->
     {noreply, State};
 
 handle_info({timeout, _Ref, send_request},  State=#state{socket=Socket,host=Hostname} ) ->
-    %% Currently, fetch only cpu and memory
-    %% FIXME: should be customizable in XML config file
+    Start = erlang:monotonic_time(millisecond),
+    %% cpu/memory/load are always fetched; any plugins named in the config's
+    %% <munin plugins="..."/> attribute are fetched too (see fetch_plugins/3).
     ?LOGF("Fetching munin for cpu on host ~p~n", [Hostname], ?DEB),
     gen_tcp:send(Socket,"fetch cpu\n"),
     AllCPU=read_munin_data(Socket),
@@ -179,7 +186,10 @@ handle_info({timeout, _Ref, send_request},  State=#state{socket=Socket,host=Host
     NonIdle=lists:keydelete('idle.value',1,AllCPU),
     RawCpu = lists:foldl(fun({_Key,Val},Acc) when is_integer(Val)->
                                  Acc+Val
-                         end,0,NonIdle) / (State#state.interval div 1000),
+                         %% float division: `div 1000' truncated, so a 1500 ms
+                         %% interval was scaled as if it were 1000 ms (and any
+                         %% sub-second interval divided by zero)
+                         end,0,NonIdle) / (State#state.interval / 1000),
     Cpu=check_value(RawCpu,{Hostname,"cpu"})/State#state.ncpus,
     ?LOGF(" munin cpu on host ~p is  ~p~n", [Hostname,Cpu], ?DEB),
     %% returns free + buffer + cache
@@ -194,11 +204,52 @@ handle_info({timeout, _Ref, send_request},  State=#state{socket=Socket,host=Host
     %% load only has one value at present
     Load = lists:foldl(fun({_Key,Val},Acc) -> Acc+Val end,0,AllLoad),
     ?LOGF(" munin load on host ~p is ~p~n", [Hostname,Load], ?DEB),
+    Extra = fetch_plugins(Socket, Hostname, State#state.plugins),
     ts_os_mon:send(State#state.mon,[{sample_counter, {cpu, Hostname}, Cpu},
                                     {sample, {freemem, Hostname}, FreeMem},
-                                    {sample, {load, Hostname}, Load}]),
-    erlang:start_timer(State#state.interval, self(), send_request ),
+                                    {sample, {load, Hostname}, Load} | Extra]),
+    %% Schedule the NEXT poll `interval' after this one STARTED, not after it
+    %% finished. Each fetch is a round trip to the monitored host plus plugin
+    %% execution there; restarting the timer afterwards made the real period
+    %% interval+fetch_time, so a nominal 1s poll of a remote host actually
+    %% sampled at ~0.75Hz. A sampling instrument that silently samples slower
+    %% than configured under-reports exactly the transients it was raised to
+    %% catch. If a cycle overruns the interval we fire immediately rather than
+    %% queue up backlog.
+    Elapsed = erlang:monotonic_time(millisecond) - Start,
+    erlang:start_timer(max(0, State#state.interval - Elapsed), self(), send_request ),
     {noreply, State}.
+
+%%--------------------------------------------------------------------
+%% Function: fetch_plugins/3
+%% Description: fetch each configured extra munin plugin and turn every numeric
+%%   field into a sample. Reported as sample_counter because the interesting
+%%   plugins (if_*, diskstats) expose monotonic counters, and sample_counter
+%%   records the per-interval delta -- so network and disk I/O appear on the
+%%   same timeline as throughput and latency instead of as raw totals.
+%%   Metric names are "<plugin>.<field>", e.g. 'if_eth0.down'.
+%% Returns: list of {sample_counter, {Name, Hostname}, Value}
+%%--------------------------------------------------------------------
+fetch_plugins(_Socket, _Hostname, []) ->
+    [];
+fetch_plugins(Socket, Hostname, Plugins) ->
+    lists:flatmap(fun(Plugin) ->
+                          ?LOGF("Fetching munin for ~p on host ~p~n",
+                                [Plugin, Hostname], ?DEB),
+                          gen_tcp:send(Socket, "fetch " ++ Plugin ++ "\n"),
+                          Data = read_munin_data(Socket),
+                          [ {sample_counter, {plugin_metric(Plugin, Key), Hostname}, Val}
+                            || {Key, Val} <- Data, is_number(Val) ]
+                  end, Plugins).
+
+%% 'down.value' from plugin "if_eth0" becomes 'if_eth0.down'
+plugin_metric(Plugin, Key) ->
+    KeyStr = atom_to_list(Key),
+    Base = case lists:suffix(".value", KeyStr) of
+               true  -> lists:sublist(KeyStr, length(KeyStr) - 6);
+               false -> KeyStr
+           end,
+    list_to_atom(Plugin ++ "." ++ Base).
 
 
 %%--------------------------------------------------------------------

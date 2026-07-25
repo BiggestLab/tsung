@@ -405,7 +405,8 @@ parse_chunked(Body, State)->
 %%----------------------------------------------------------------------
 read_chunk(<<>>, State, Int, Acc) ->
     ?LOGF("No data in chunk [Int=~p, Acc=~p] ~n", [Int,Acc],?INFO),
-    AccInt = list_to_binary(httpd_util:integer_to_hexlist(Int)),
+    %% httpd_util:integer_to_hexlist/1 was removed from OTP
+    AccInt = list_to_binary(integer_to_list(Int, 16)),
     { State#state_rcv{acc = AccInt, ack_done = false }, [] }; % read more data
 %% this code has been inspired by inets/http_lib.erl
 %% Extensions not implemented

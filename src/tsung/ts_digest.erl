@@ -72,7 +72,8 @@ shahex(Clear) ->
 %%%----------------------------------------------------------------------
 tohex(A)->
     Fun = fun(X)->
-                  ts_utils:to_lower(padhex(httpd_util:integer_to_hexlist(X)))
+                  %% httpd_util:integer_to_hexlist/1 was removed from OTP
+                  ts_utils:to_lower(padhex(integer_to_list(X, 16)))
           end,
     lists:flatten( lists:map(Fun, A) ).
 
