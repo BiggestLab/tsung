@@ -309,6 +309,42 @@ monitor_plugins_test() ->
     ?assertMatch({"host_plugins", {munin,{_Port,["if_eth0","diskstats"]}}, 10000},
                  lists:keyfind("host_plugins", 1, Config#config.monitor_hosts)).
 
+%% The loop backoff can now come from a dynvar captured off the response
+%% (a Retry-After header, typically) instead of a value frozen at parse time.
+match_sleep_var_test() ->
+    [Dynamic|_] = read_sleep_var_matches(),
+    ?assertEqual(ra, Dynamic#match.sleep_var),
+    %% sleep_loop keeps its own unit: a 50ms static fallback...
+    ?assertEqual(50, Dynamic#match.sleep_loop),
+    %% ...while the dynvar is declared in seconds and stored as the
+    %% milliseconds-per-unit multiplier ts_search applies at runtime
+    ?assertEqual(1000, Dynamic#match.sleep_var_unit),
+    %% sleep_max is seconds, so 30 -> 30000ms
+    ?assertEqual(30000, Dynamic#match.sleep_max).
+
+%% No sleep_var: the pre-existing static behaviour must be bit-for-bit intact.
+match_sleep_var_absent_test() ->
+    [_, Static|_] = read_sleep_var_matches(),
+    ?assertEqual(undefined, Static#match.sleep_var),
+    ?assertEqual(2000, Static#match.sleep_loop).
+
+%% sleep_max is deliberately independent of sleep_var_unit: a millisecond
+%% sleep_var must still get the documented 60s ceiling, not a 60ms one.
+match_sleep_max_default_test() ->
+    [_, _, Defaults] = read_sleep_var_matches(),
+    ?assertEqual(wait, Defaults#match.sleep_var),
+    ?assertEqual(1, Defaults#match.sleep_var_unit),
+    ?assertEqual(60000, Defaults#match.sleep_max),
+    ?assertEqual(1000, Defaults#match.sleep_loop).
+
+%% in document order: the three <match> of the fixture session
+read_sleep_var_matches() ->
+    myset_env(),
+    {ok, Config} = ts_config:read("./src/test/match_sleep_var.xml","."),
+    [ M || {_Key, Req} <- ets:tab2list(Config#config.session_tab),
+           is_record(Req, ts_request),
+           M <- Req#ts_request.match ].
+
 myset_env()->
     myset_env(0).
 myset_env(Level)->
