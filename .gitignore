@@ -25,10 +25,12 @@ jabber_muc.xml
 # ts_config:backup_config/3 drops a copy of every config it reads into the
 # log dir, which is the repo root when the test suite runs
 match_sleep_var.xml
+match_sleep_var_bad_unit.xml
 monitor_interval.xml
 pgsql.xml
 src/test/badpop.xml
 src/test/match_sleep_var.xml
+src/test/match_sleep_var_bad_unit.xml
 src/test/monitor_interval.xml
 src/test/thinkfirst.xml
 src/test/usersdb.csv

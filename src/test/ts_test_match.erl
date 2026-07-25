@@ -190,6 +190,118 @@ loop_sleep_floor_test() ->
     NoStatic = ?RETRY_MATCH#match{sleep_loop=0},
     ?assertEqual(1, ts_search:loop_sleep(NoStatic, ts_dynvars:new(ra,"0"))).
 
+%%% sleep_var may name several dynvars in preference order. The case that
+%%% motivates it: a 429 may carry a vendor's millisecond header, or only the
+%%% standard Retry-After, whose grammar cannot express a sub-second delay.
+
+-define(PREF_MATCH, #match{do=loop, 'when'=match, sleep_loop=50,
+                           sleep_var=[ra_ms, ra_s], sleep_var_unit=[1, 1000],
+                           sleep_max=30000}).
+
+%% the preferred source answers, so the coarse one is never consulted
+loop_sleep_preference_first_test() ->
+    myset_env(),
+    ?assertEqual(250, ts_search:loop_sleep(?PREF_MATCH,
+                                           ts_dynvars:new([ra_ms,ra_s],["250","2"]))),
+    %% ...even when it asks for less than the other would have given
+    ?assertEqual(120, ts_search:loop_sleep(?PREF_MATCH,
+                                           ts_dynvars:new([ra_ms,ra_s],["120","9"]))).
+
+%% the server that does not send the vendor header is the whole reason for the
+%% list; each of the three ways it can be silent must fall through
+loop_sleep_preference_second_test() ->
+    myset_env(),
+    %% never captured at all
+    ?assertEqual(2000, ts_search:loop_sleep(?PREF_MATCH, ts_dynvars:new(ra_s,"2"))),
+    %% captured but absent from the response: the common shape
+    ?assertEqual(2000, ts_search:loop_sleep(?PREF_MATCH,
+                                            ts_dynvars:new([ra_ms,ra_s],[undefined,"2"]))),
+    %% captured and unreadable
+    ?assertEqual(2000, ts_search:loop_sleep(?PREF_MATCH,
+                                            ts_dynvars:new([ra_ms,ra_s],["soon","2"]))),
+    ?assertEqual(2000, ts_search:loop_sleep(?PREF_MATCH,
+                                            ts_dynvars:new([ra_ms,ra_s],[<<>>,<<"2">>]))).
+
+%% the response that ends the retry loop carries neither header
+loop_sleep_preference_none_test() ->
+    myset_env(),
+    ?assertEqual(50, ts_search:loop_sleep(?PREF_MATCH, [])),
+    ?assertEqual(50, ts_search:loop_sleep(?PREF_MATCH,
+                                          ts_dynvars:new([ra_ms,ra_s],[undefined,undefined]))),
+    ?assertEqual(50, ts_search:loop_sleep(?PREF_MATCH,
+                                          ts_dynvars:new([ra_ms,ra_s],["soon","later"]))).
+
+%% a source that answers settles it: falling through a delay that parsed would
+%% hand the decision to a source the scenario deliberately ranked lower
+loop_sleep_preference_stops_at_first_usable_test() ->
+    myset_env(),
+    %% clamped, not passed over
+    ?assertEqual(30000, ts_search:loop_sleep(?PREF_MATCH,
+                                             ts_dynvars:new([ra_ms,ra_s],["60000","2"]))),
+    %% floored, not passed over
+    ?assertEqual(50, ts_search:loop_sleep(?PREF_MATCH,
+                                          ts_dynvars:new([ra_ms,ra_s],["0","2"]))).
+
+%% the ceiling belongs to the backoff, not to a particular source
+loop_sleep_preference_clamp_test() ->
+    myset_env(),
+    ?assertEqual(30000, ts_search:loop_sleep(?PREF_MATCH,
+                                             ts_dynvars:new([ra_ms,ra_s],[undefined,"3600"]))).
+
+%% one unit for every name: "all of these are seconds"
+loop_sleep_one_unit_many_names_test() ->
+    myset_env(),
+    Match = ?PREF_MATCH#match{sleep_var=[ra_ms,ra_s], sleep_var_unit=1000},
+    ?assertEqual(2000, ts_search:loop_sleep(Match,
+                                            ts_dynvars:new([ra_ms,ra_s],["2","9"]))),
+    ?assertEqual(9000, ts_search:loop_sleep(Match,
+                                            ts_dynvars:new([ra_ms,ra_s],[undefined,"9"]))).
+
+%% more names than units: the shortfall takes the last unit given
+loop_sleep_units_shortfall_test() ->
+    myset_env(),
+    Match = ?PREF_MATCH#match{sleep_var=[a,b,c], sleep_var_unit=[1,1000]},
+    ?assertEqual(250,  ts_search:loop_sleep(Match, ts_dynvars:new([a,b,c],["250","2","3"]))),
+    ?assertEqual(2000, ts_search:loop_sleep(Match, ts_dynvars:new([a,b,c],[undefined,"2","3"]))),
+    %% c had no unit of its own, so it inherits b's seconds rather than
+    %% silently reverting to some default
+    ?assertEqual(3000, ts_search:loop_sleep(Match,
+                                            ts_dynvars:new([a,b,c],[undefined,undefined,"3"]))).
+
+%% more units than names: the surplus names nothing
+loop_sleep_units_surplus_test() ->
+    myset_env(),
+    Match = ?PREF_MATCH#match{sleep_var=[a], sleep_var_unit=[1,1000,60000]},
+    ?assertEqual(250, ts_search:loop_sleep(Match, ts_dynvars:new(a,"250"))),
+    ?assertEqual(50,  ts_search:loop_sleep(Match, ts_dynvars:new(a,undefined))).
+
+%% the fall-through messages are the only trace of a preference quietly
+%% degrading, so they have to survive being formatted for real
+loop_sleep_preference_logging_test() ->
+    myset_env(?INFO),
+    try
+        ?assertEqual(2000, ts_search:loop_sleep(?PREF_MATCH,
+                                                ts_dynvars:new([ra_ms,ra_s],["soon","2"]))),
+        ?assertEqual(50, ts_search:loop_sleep(?PREF_MATCH, []))
+    after
+        myset_env()
+    end.
+
+%% the pairing rule itself, away from any lookup
+sleep_sources_test() ->
+    %% the pre-list shapes are lifted, not special-cased
+    ?assertEqual([{ra,1000}], ts_search:sleep_sources(ra, 1000)),
+    ?assertEqual([{a,1},{b,1000}], ts_search:sleep_sources([a,b], [1,1000])),
+    %% one unit spreads over every name, whichever shape it arrived in
+    ?assertEqual([{a,1000},{b,1000},{c,1000}], ts_search:sleep_sources([a,b,c], 1000)),
+    ?assertEqual([{a,1000},{b,1000},{c,1000}], ts_search:sleep_sources([a,b,c], [1000])),
+    %% ...which is the same rule as "carry the last unit over"
+    ?assertEqual([{a,1},{b,1000},{c,1000}], ts_search:sleep_sources([a,b,c], [1,1000])),
+    ?assertEqual([{a,1}], ts_search:sleep_sources([a], [1,1000,60000])),
+    ?assertEqual([], ts_search:sleep_sources([], [1000])),
+    %% no units at all is only reachable from a hand-built #match{}
+    ?assertEqual([{a,1000},{b,1000}], ts_search:sleep_sources([a,b], [])).
+
 %% the sleep really is driven by the response: match/5 threads the dynvars of
 %% the response it just matched into the loop clause
 loop_sleep_end_to_end_test() ->

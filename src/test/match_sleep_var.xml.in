@@ -3,7 +3,11 @@
 <!-- Exercises the server-directed loop backoff. sleep_loop is fixed when this
      file is read, so it can only guess how long a shedding server wants to be
      left alone; sleep_var lets a Retry-After captured from the response decide
-     instead, bounded by sleep_max. -->
+     instead, bounded by sleep_max. sleep_var may list several sources in
+     preference order, since the same 429 carries a millisecond-resolution
+     vendor header from one server and only whole-second Retry-After from the
+     next. Each match is named so the tests can pick it out without depending on
+     the order the config parser happens to store requests in. -->
 <tsung loglevel="notice" version="1.0">
   <clients>
     <client host="localhost" use_controller_vm="true"/>
@@ -24,7 +28,7 @@
       <!-- honour Retry-After, falling back to a 50ms static backoff -->
       <request subst="true">
         <dyn_variable name="ra" header="retry-after"/>
-        <match do="loop" when="match" loop_back="0"
+        <match do="loop" when="match" loop_back="0" name="single"
                sleep_loop="50" unit="millisecond"
                sleep_var="ra" sleep_var_unit="second" sleep_max="30"
                max_loop="20">retry-after</match>
@@ -33,7 +37,7 @@
 
       <!-- no sleep_var: the pre-existing static behaviour must be untouched -->
       <request>
-        <match do="loop" when="match" sleep_loop="2"
+        <match do="loop" when="match" sleep_loop="2" name="static"
                max_loop="3">busy</match>
         <http url="/static" method="GET" version="1.1"/>
       </request>
@@ -41,10 +45,70 @@
       <!-- sleep_max is left out: it defaults to 60 seconds whatever
            sleep_var_unit says -->
       <request>
-        <match do="loop" when="match" sleep_loop="1" unit="second"
+        <match do="loop" when="match" sleep_loop="1" unit="second" name="defaults"
                sleep_var="wait" sleep_var_unit="millisecond"
                max_loop="3">slow</match>
         <http url="/defaults" method="GET" version="1.1"/>
+      </request>
+
+      <!-- the motivating case: prefer the vendor's millisecond header, settle
+           for the standard whole-second one, and keep the static fallback for
+           the response that ends the loop and carries neither -->
+      <request subst="true">
+        <dyn_variable name="ra_ms" header="x-retry-after-ms"/>
+        <dyn_variable name="ra_s" header="retry-after"/>
+        <match do="loop" when="match" loop_back="0" name="preference"
+               sleep_loop="50" unit="millisecond"
+               sleep_var="ra_ms,ra_s" sleep_var_unit="millisecond,second"
+               sleep_max="30" max_loop="20">retry-after</match>
+        <http url="/publish_events" method="POST" version="1.1" contents="x"/>
+      </request>
+
+      <!-- whitespace round the commas is how these read when the two lists are
+           lined up to be compared by eye -->
+      <request subst="true">
+        <dyn_variable name="ra_ms" header="x-retry-after-ms"/>
+        <dyn_variable name="ra_s" header="retry-after"/>
+        <match do="loop" when="match" loop_back="0" name="spaced"
+               sleep_loop="50" unit="millisecond"
+               sleep_var=" ra_ms , ra_s " sleep_var_unit=" millisecond , second "
+               max_loop="20">retry-after</match>
+        <http url="/spaced" method="POST" version="1.1" contents="x"/>
+      </request>
+
+      <!-- one unit for every name: the idiomatic way to say "all seconds" -->
+      <request subst="true">
+        <dyn_variable name="ra_a" header="x-retry-a"/>
+        <dyn_variable name="ra_b" header="x-retry-b"/>
+        <dyn_variable name="ra_c" header="retry-after"/>
+        <match do="loop" when="match" loop_back="0" name="one_unit"
+               sleep_loop="50" unit="millisecond"
+               sleep_var="ra_a,ra_b,ra_c" sleep_var_unit="second"
+               max_loop="20">retry-after</match>
+        <http url="/one_unit" method="POST" version="1.1" contents="x"/>
+      </request>
+
+      <!-- more names than units: parsing must not fail, the last unit carries
+           over to the names it ran out on -->
+      <request subst="true">
+        <dyn_variable name="ra_a" header="x-retry-a"/>
+        <dyn_variable name="ra_b" header="x-retry-b"/>
+        <dyn_variable name="ra_c" header="retry-after"/>
+        <match do="loop" when="match" loop_back="0" name="short_units"
+               sleep_loop="50" unit="millisecond"
+               sleep_var="ra_a,ra_b,ra_c" sleep_var_unit="millisecond,second"
+               max_loop="20">retry-after</match>
+        <http url="/short_units" method="POST" version="1.1" contents="x"/>
+      </request>
+
+      <!-- more units than names: the surplus names nothing and is dropped -->
+      <request subst="true">
+        <dyn_variable name="ra_a" header="retry-after"/>
+        <match do="loop" when="match" loop_back="0" name="extra_units"
+               sleep_loop="50" unit="millisecond"
+               sleep_var="ra_a" sleep_var_unit="second,minute,hour"
+               max_loop="20">retry-after</match>
+        <http url="/extra_units" method="POST" version="1.1" contents="x"/>
       </request>
     </session>
   </sessions>

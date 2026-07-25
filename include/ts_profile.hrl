@@ -34,16 +34,23 @@
           sleep_loop,       % in MILLISECONDS (ts_config multiplies the
                             % configured value by its unit; ts_search passes
                             % this straight to timer:sleep/1)
-          sleep_var,        % atom() | undefined. Name of a dynvar holding a
-                            % server-directed backoff (typically captured from
-                            % a Retry-After header). When it holds a usable
-                            % delay it wins over sleep_loop, so the generator
-                            % obeys the server instead of a guess baked into
-                            % the config at parse time.
-          sleep_var_unit=1000, % MILLISECONDS PER UNIT of the sleep_var value
-                            % (ts_config resolves the unit name to a multiplier
-                            % at parse time, so the client node never has to
-                            % reach into the controller app to convert)
+          sleep_var,        % atom() | [atom()] | undefined. Name(s) of dynvars
+                            % holding a server-directed backoff (typically
+                            % captured from a Retry-After header). When one
+                            % holds a usable delay it wins over sleep_loop, so
+                            % the generator obeys the server instead of a guess
+                            % baked into the config at parse time. A list is an
+                            % ordered PREFERENCE: the first name that yields a
+                            % usable delay wins, so a scenario can ask for a
+                            % vendor's millisecond header and settle for the
+                            % whole-second Retry-After when it is all there is.
+          sleep_var_unit=1000, % MILLISECONDS PER UNIT of the sleep_var value;
+                            % integer() | [integer()], positionally matching
+                            % sleep_var (see ts_search:sleep_sources/2 for what
+                            % happens when the two lengths differ). ts_config
+                            % resolves each unit name to a multiplier at parse
+                            % time, so the client node never has to reach into
+                            % the controller app to convert.
           sleep_max=60000,  % in MILLISECONDS (configured in seconds, since a
                             % wall-clock safety bound must not change meaning
                             % with sleep_var_unit). Ceiling on the

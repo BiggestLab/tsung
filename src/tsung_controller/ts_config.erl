@@ -829,16 +829,42 @@ parse(Element=#xmlElement{name=match,attributes=Attrs},
     %% <dyn_variable header="retry-after"/>) whose value overrides that guess at
     %% runtime. Empty means "not set" -- list_to_atom("") would otherwise create
     %% a '' variable name that can never be looked up.
-    SleepVar   = case getAttr(string, Attrs, sleep_var, "") of
-                     ""  -> undefined;
-                     Var -> list_to_atom(Var)
+    %% A comma-separated list is an ordered preference rather than a set: the
+    %% same 429 may carry a vendor's millisecond header and the standard
+    %% Retry-After, whose grammar is delay-seconds (RFC 9110 10.2.3) and so
+    %% cannot express the sub-second backoff this fork exists to honour. Naming
+    %% both lets a scenario take the precise one where it is offered and degrade
+    %% to the coarse one where it is not, instead of hard-coding either.
+    SleepVars  = split_list(getAttr(string, Attrs, sleep_var, "")),
+    %% One name keeps the pre-list shapes exactly (atom, integer multiplier), so
+    %% every existing scenario, and every #match{} built by hand, is untouched.
+    SleepVar   = case SleepVars of
+                     []    -> undefined;
+                     [One] -> list_to_atom(One);
+                     Many  -> [list_to_atom(V) || V <- Many]
                  end,
     %% The dynvar carries a bare number, so its unit has to be declared
     %% separately from sleep_loop's: Retry-After is seconds even when the static
     %% fallback is written in milliseconds. Stored as a millisecond multiplier
     %% because ts_search runs on client nodes, which do not load the controller
     %% application and so cannot call to_milliseconds/2 themselves.
-    SleepVarUnit = getAttr(string, Attrs, sleep_var_unit, "second"),
+    %% Units pair positionally with the names. Mismatched lengths are NOT a
+    %% config error -- one unit for many names is the normal way to say "all of
+    %% these are seconds" -- so the shortfall is resolved at runtime by
+    %% ts_search:sleep_sources/2: a name with no unit of its own inherits the
+    %% last unit given, and units naming nothing are dropped. Warn on a genuine
+    %% mismatch anyway (more than one unit, but not enough to go round), because
+    %% that shape is far more likely to be a miscount than an intention.
+    SleepVarUnits = case split_list(getAttr(string, Attrs, sleep_var_unit, "")) of
+                        [] -> ["second"];
+                        Us -> Us
+                    end,
+    warn_sleep_var_units(SleepVars, SleepVarUnits),
+    SleepVarUnit = case [round(to_milliseconds(checked_sleep_var_unit(U), 1))
+                         || U <- SleepVarUnits] of
+                       [OneUnit] -> OneUnit;
+                       ManyUnits -> ManyUnits
+                   end,
     %% Ceiling on the sleep_var-derived backoff. Without it a server answering
     %% `Retry-After: 3600' parks the virtual user for an hour, which looks like
     %% a hung run rather than a bad response. Always in SECONDS, deliberately
@@ -861,7 +887,7 @@ parse(Element=#xmlElement{name=match,attributes=Attrs},
                         %% requires an integer and SleepLoop may now be a float.
                         sleep_loop=round(to_milliseconds(SleepUnit, SleepLoop)),
                         sleep_var=SleepVar,
-                        sleep_var_unit=round(to_milliseconds(SleepVarUnit, 1)),
+                        sleep_var_unit=SleepVarUnit,
                         sleep_max=round(to_milliseconds("second", SleepMax)),
                         skip_headers=SkipHeaders,
                         loop_back=LoopBack, max_restart=MaxRestart, max_loop=MaxLoop, apply_to_content=ApplyTo},
@@ -1307,6 +1333,54 @@ to_milliseconds("second", Val)-> Val*1000;
 to_milliseconds("minute", Val)-> Val*60000;
 to_milliseconds("hour",   Val)-> Val*3600000;
 to_milliseconds("millisecond", Val)-> Val.
+
+%%%----------------------------------------------------------------------
+%%% Function: split_list/1
+%%% Purpose: comma-separated attribute -> trimmed, non-empty items.
+%%%   Whitespace is tolerated because these lists are written to line up
+%%%   visually with a parallel list in the same element, and empty items are
+%%%   dropped rather than kept as '' so that a stray or trailing comma cannot
+%%%   silently shift every later item onto the wrong unit.
+%%%----------------------------------------------------------------------
+split_list(Str) ->
+    [ Item || Raw <- string:tokens(Str, ","),
+              Item <- [ts_utils:clean_str(Raw)],
+              Item =/= "" ].
+
+%%%----------------------------------------------------------------------
+%%% Function: checked_sleep_var_unit/1
+%%% Purpose: validate a sleep_var_unit name before to_milliseconds/2 sees it.
+%%%   The DTD used to enumerate the legal units, but a per-name list cannot be
+%%%   expressed as an enumeration, so the attribute is now CDATA and this is
+%%%   the only guard left. Without it a typo reaches to_milliseconds/2 as an
+%%%   unmatched clause and aborts the whole config read with a function_clause
+%%%   naming neither the file nor the attribute.
+%%%----------------------------------------------------------------------
+checked_sleep_var_unit(Unit) when Unit == "second";
+                                  Unit == "minute";
+                                  Unit == "hour";
+                                  Unit == "millisecond" ->
+    Unit;
+checked_sleep_var_unit(Unit) ->
+    io:format(standard_error,
+              "Client config error: unknown sleep_var_unit ~p, expected one of "
+              "hour, minute, second, millisecond~n", [Unit]),
+    exit({invalid_xml, "bad sleep_var_unit"}).
+
+%%%----------------------------------------------------------------------
+%%% Function: warn_sleep_var_units/2
+%%% Purpose: flag a sleep_var/sleep_var_unit list that looks miscounted.
+%%%   Giving a single unit for several names is idiomatic ("all of these are
+%%%   seconds") and stays silent; anything else that fails to line up is
+%%%   accepted, since refusing to parse would take a whole test run down over
+%%%   an attribute the run may never reach, but it is worth saying out loud.
+%%%----------------------------------------------------------------------
+warn_sleep_var_units(Vars, Units) when length(Units) > 1, length(Vars) =/= length(Units) ->
+    ?LOGF("sleep_var has ~p name(s) but sleep_var_unit has ~p unit(s); "
+          "surplus names take the last unit, surplus units are ignored~n",
+          [length(Vars), length(Units)], ?WARN);
+warn_sleep_var_units(_Vars, _Units) ->
+    ok.
 
 %%%----------------------------------------------------------------------
 %%% Function: get_default/2

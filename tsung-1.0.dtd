@@ -191,8 +191,8 @@ repeat | if | change_type | foreach | set_option | interaction | abort )*>
     max_restart NMTOKEN "3"
     sleep_loop  NMTOKEN "5"
     unit (hour | minute | second | millisecond) "second"
-    sleep_var   NMTOKEN #IMPLIED
-    sleep_var_unit (hour | minute | second | millisecond) "second"
+    sleep_var   CDATA #IMPLIED
+    sleep_var_unit CDATA "second"
     sleep_max   NMTOKEN "60"
     apply_to_content  NMTOKEN "undefined"
     skip_headers      NMTOKEN "no"

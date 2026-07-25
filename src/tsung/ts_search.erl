@@ -35,11 +35,16 @@
 -export([subst/2, match/5, parse_dynvar/2, parse_dynvar/3]).
 
 %% exported for unit tests only: the loop backoff is pure and worth pinning
-%% independently of the timer:sleep/1 it feeds.
--export([loop_sleep/2]).
+%% independently of the timer:sleep/1 it feeds, and the name/unit pairing rule
+%% is worth pinning independently of a lookup.
+-export([loop_sleep/2, sleep_sources/2]).
 
 -include("ts_macros.hrl").
 -include("ts_profile.hrl").
+
+%% Milliseconds per unit for a sleep_var whose unit was left unstated; matches
+%% the sleep_var_unit="second" attribute default in the DTD.
+-define(SLEEP_VAR_UNIT_DEFAULT, 1000).
 
 %% @type dynvar() = {Key::atom(), Value::string()} | [].
 %% @type dynvars() = [dynvar()]
@@ -273,25 +278,67 @@ setcount(#match{do=abort_test,name=Name}, {Count,MaxC,SessionId,UserId}, Stats,_
 %%      than a last resort: the successful response that ends the retry loop
 %%      carries no Retry-After at all, so "no usable value" is the common case
 %%      and must be cheap and silent.
+%%      sleep_var may name several dynvars, in which case they are an ordered
+%%      preference and the first that yields a usable delay wins: one server
+%%      answers a 429 with a millisecond-resolution vendor header, another with
+%%      nothing but Retry-After, and a scenario that has to name one of them up
+%%      front would be measuring the wrong thing against half the fleet.
 %% @end
 %%----------------------------------------------------------------------
 loop_sleep(#match{sleep_loop=Sleep, sleep_var=undefined}, _DynVars) ->
     Sleep;
 loop_sleep(#match{sleep_loop=Sleep, sleep_var=Var, sleep_var_unit=Unit, sleep_max=Max}, DynVars) ->
+    first_delay(sleep_sources(Var, Unit), Sleep, Max, DynVars).
+
+%% Walk the preference in order. A source is passed over only when it is silent
+%% (absent, or `undefined' because the header was not sent) or unreadable; a
+%% source that does answer settles the matter, even if bound_sleep/4 then clamps
+%% it or refuses it as a busy spin. Continuing past a delay that parsed would
+%% invert the declared preference, handing the decision to a source the scenario
+%% ranked lower precisely because it is coarser.
+first_delay([], Sleep, _Max, _DynVars) ->
+    Sleep;
+first_delay([{Var, Unit} | Rest], Sleep, Max, DynVars) ->
     case ts_dynvars:lookup(Var, DynVars) of
         {ok, Value} ->
             case to_delay(Value) of
                 {ok, Delay} ->
                     bound_sleep(round(Delay * Unit), Sleep, Max, Var);
                 error ->
-                    ?LOGF("Loop sleep: dynvar ~p is not a delay (~p), using sleep_loop~n",
-                          [Var, Value], ?INFO),
-                    Sleep
+                    ?LOGF("Loop sleep: dynvar ~p is not a delay (~p), ~s~n",
+                          [Var, Value, next_source(Rest)], ?INFO),
+                    first_delay(Rest, Sleep, Max, DynVars)
             end;
         false ->
-            ?LOGF("Loop sleep: no dynvar ~p, using sleep_loop~n",[Var], ?INFO),
-            Sleep
+            ?LOGF("Loop sleep: no dynvar ~p, ~s~n",[Var, next_source(Rest)], ?INFO),
+            first_delay(Rest, Sleep, Max, DynVars)
     end.
+
+next_source([]) -> "using sleep_loop";
+next_source(_)  -> "trying the next source".
+
+%% Pair each candidate name with the millisecond multiplier for its unit.
+%% ts_config hands over whatever the attributes said, without forcing the two
+%% lists to the same length, because they legitimately differ: "these three are
+%% all seconds" is one unit for three names. So one rule covers both that and a
+%% miscount -- a name with no unit of its own inherits the LAST unit given, and
+%% units that name nothing are dropped. The single-unit case is then just its
+%% degenerate form, with no special case to get wrong.
+%% A bare atom/integer (every pre-list config, and #match{} records built by
+%% hand) is lifted into the same shape, so there is one code path below.
+sleep_sources(Var, Unit) ->
+    Names = case is_list(Var) of true -> Var;  false -> [Var]  end,
+    Units = case is_list(Unit) of true -> Unit; false -> [Unit] end,
+    %% ?SLEEP_VAR_UNIT_DEFAULT mirrors the sleep_var_unit="second" attribute
+    %% default, and is reached only if a hand-built #match{} left the units out.
+    pair_units(Names, Units, ?SLEEP_VAR_UNIT_DEFAULT).
+
+pair_units([], _Units, _Last) ->
+    [];
+pair_units([Name | Names], [Unit | Units], _Last) ->
+    [{Name, Unit} | pair_units(Names, Units, Unit)];
+pair_units([Name | Names], [], Last) ->
+    [{Name, Last} | pair_units(Names, [], Last)].
 
 %% A server is entitled to ask for far more patience than a load test has; obey
 %% it up to the configured ceiling and no further, and say so, because an
