@@ -277,6 +277,38 @@ wildcard_test() ->
     ?assertEqual(["foo1", "foo2"], ts_utils:wildcard("foo?",Names)),
     ?assertEqual(["foobar"], ts_utils:wildcard("foo*r",Names)).
 
+%% The per-monitor poll interval. Each monitor_hosts entry is
+%% {Host, Type, IntervalMillisec}.
+monitor_interval_test() ->
+    myset_env(),
+    {ok, Config} = ts_config:read("./src/test/monitor_interval.xml","."),
+    Hosts = Config#config.monitor_hosts,
+    Get = fun(H) ->
+                  {_,_,I} = lists:keyfind(H, 1, Hosts),
+                  I
+          end,
+    %% no attribute -> documented 10s default, i.e. existing behaviour is kept
+    ?assertEqual(10000, Get("host_default")),
+    ?assertEqual(2000,  Get("host_2s")),
+    %% unit is applied, and 1500ms survives as 1500 (it must not be truncated
+    %% to a whole second the way the old `div 1000' CPU maths did)
+    ?assertEqual(1500,  Get("host_1500ms")),
+    ?assertEqual(60000, Get("host_1min")),
+    %% below the floor -> clamped to 1000, never zero (a zero interval would
+    %% divide by zero in the munin CPU calculation)
+    ?assertEqual(1000,  Get("host_toofast")).
+
+%% plugins= must still parse, and must not disturb the interval default
+monitor_plugins_test() ->
+    myset_env(),
+    {ok, Config} = ts_config:read("./src/test/monitor_interval.xml","."),
+    %% the port is left as a pattern: the test env does not set the munin_port
+    %% application default, so it resolves to {undef_var,munin_port} here and to
+    %% 4949 under a real run. The plugin list and the interval default are what
+    %% this test is pinning.
+    ?assertMatch({"host_plugins", {munin,{_Port,["if_eth0","diskstats"]}}, 10000},
+                 lists:keyfind("host_plugins", 1, Config#config.monitor_hosts)).
+
 myset_env()->
     myset_env(0).
 myset_env(Level)->

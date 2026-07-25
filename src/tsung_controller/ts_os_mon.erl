@@ -64,11 +64,16 @@ activate() ->
             NewHosts = case lists:keyfind(Controller, 1, Hosts) of
                            false ->
                                ?LOG("Force monitoring of controller node",?DEB),
-                               Hosts++[{Controller, {erlang,[]}}];
+                               Hosts++[{Controller, {erlang,[]}, ?INTERVAL}];
                            _ ->
                                Hosts
                        end,
-            Fun = fun({HostStr,{Type,Options}}) ->
+            %% the 3-tuple carries a per-monitor poll interval from the config
+            %% file; the 2-tuple clause keeps older callers working on ?INTERVAL
+            Fun = fun({HostStr,{Type,Options},Interval}) ->
+                          Args= {HostStr, Options, Interval,{global, ts_mon}},
+                          ts_os_mon_sup:start_child(Type, Args);
+                     ({HostStr,{Type,Options}}) ->
                           Args= {HostStr, Options, ?INTERVAL,{global, ts_mon}},
                           ts_os_mon_sup:start_child(Type, Args)
                   end,

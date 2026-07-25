@@ -51,6 +51,8 @@
 <!ATTLIST monitor
      host NMTOKEN #REQUIRED
      batch (true | false) "false"
+     interval NMTOKEN "10"
+     unit (hour | minute | second | millisecond) "second"
      type (snmp | erlang | munin) "erlang">
 
 <!ELEMENT mysqladmin EMPTY>
@@ -74,7 +76,8 @@
 
 <!ELEMENT munin EMPTY>
 <!ATTLIST munin
-     port      NMTOKEN "4949">
+     port      NMTOKEN "4949"
+     plugins   CDATA   #IMPLIED>
 
 <!ELEMENT load (arrivalphase | user)+>
 <!ATTLIST load

@@ -19,17 +19,18 @@ TEST-ts_test_all.xml
 badpop.xml
 http_distributed.xml
 http_simple.xml
+
 jabber.xml
 jabber_muc.xml
 pgsql.xml
 src/test/badpop.xml
+src/test/monitor_interval.xml
 src/test/thinkfirst.xml
 src/test/usersdb.csv
 src/test/xmpp-muc.xml
 test_case.xml
 thinkfirst.xml
 xmpp-muc.xml
-
 
 # build artifacts
 Makefile

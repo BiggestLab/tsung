@@ -144,6 +144,23 @@ parse(Element = #xmlElement{name=server, attributes=Attrs}, Conf=#config{servers
 parse(Element = #xmlElement{name=monitor, attributes=Attrs},
       Conf = #config{monitor_hosts=MHList}) ->
     Host = getAttr(Attrs, host),
+    %% Poll interval for this monitor. The built-in default (10s) is far too
+    %% coarse for short, high-rate runs -- a 60s run yields 6 points, so any
+    %% ramp or stall shorter than ~20s is invisible. Sampling has to be at
+    %% least 2x, preferably 3-5x, the rate of the phenomenon being observed,
+    %% so this is per-monitor and settable from the config file.
+    %% Note the floor: sub-second polling is rejected because the munin CPU
+    %% calculation divides by the interval in seconds, and because polling
+    %% faster than the agent can answer perturbs the system under test.
+    MonInterval = case round(to_milliseconds(getAttr(string, Attrs, unit, "second"),
+                                             getAttr(float_or_integer, Attrs,
+                                                     interval, 10))) of
+                      I when I < 1000 ->
+                          ?LOGF("monitor interval ~p ms is below the 1000 ms "
+                                "floor; using 1000~n", [I], ?WARN),
+                          1000;
+                      I -> I
+                  end,
     Type = case getAttr(atom, Attrs, type, erlang) of
                erlang ->
                    case lists:keysearch(mysqladmin,#xmlElement.name,
@@ -183,17 +200,29 @@ parse(Element = #xmlElement{name=monitor, attributes=Attrs},
                        {value, MuninEl=#xmlElement{} } ->
                            Port = getAttr(integer,MuninEl#xmlElement.attributes,
                                                     port, ?config(munin_port)),
-                           {munin, {Port}};
+                           %% optional comma-separated extra munin plugins to
+                           %% fetch alongside cpu/memory/load, e.g.
+                           %%   plugins="if_eth0,diskstats"
+                           %% Their values are reported as counters, so network
+                           %% and disk I/O land on the same timeline as
+                           %% throughput and latency.
+                           Plugins = case getAttr(string,MuninEl#xmlElement.attributes,
+                                                  plugins, "") of
+                                         ""  -> [];
+                                         Str -> [ts_utils:clean_str(P)
+                                                 || P <- string:tokens(Str, ",")]
+                                     end,
+                           {munin, {Port, Plugins}};
                        _ ->
-                           {munin, {?config(munin_port) }}
+                           {munin, {?config(munin_port), [] }}
                    end
            end,
     NewMon = case getAttr(atom, Attrs, batch, false) of
                  true ->
                      Nodes = lists:usort(get_batch_nodes(list_to_atom(Host))),
-                     lists:map(fun(N)-> {N, Type} end, Nodes);
+                     lists:map(fun(N)-> {N, Type, MonInterval} end, Nodes);
                  _ ->
-                     [{Host, Type}]
+                     [{Host, Type, MonInterval}]
              end,
     lists:foldl(fun parse/2,
         Conf#config{monitor_hosts = lists:append(MHList, NewMon)},

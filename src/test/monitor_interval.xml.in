@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<!DOCTYPE tsung SYSTEM "@prefix@/share/@PACKAGE_NAME@/@DTD@">
+<!-- Exercises the per-monitor poll interval. The default of 10s is too coarse
+     for short high-rate runs, so `interval' (with an optional `unit') makes it
+     settable per monitor from the config file. -->
+<tsung loglevel="notice" version="1.0">
+  <clients>
+    <client host="localhost" use_controller_vm="true"/>
+  </clients>
+
+  <servers>
+    <server host="localhost" port="8000" type="tcp"/>
+  </servers>
+
+  <monitoring>
+    <!-- default: no interval attribute, so 10s -->
+    <monitor host="host_default" type="munin"/>
+    <!-- explicit seconds -->
+    <monitor host="host_2s" type="munin" interval="2"/>
+    <!-- unit conversion -->
+    <monitor host="host_1500ms" type="munin" interval="1500" unit="millisecond"/>
+    <monitor host="host_1min" type="munin" interval="1" unit="minute"/>
+    <!-- below the 1000ms floor: clamped, not accepted -->
+    <monitor host="host_toofast" type="munin" interval="100" unit="millisecond"/>
+    <!-- extra plugins ride alongside cpu/memory/load -->
+    <monitor host="host_plugins" type="munin">
+      <munin plugins="if_eth0,diskstats"/>
+    </monitor>
+  </monitoring>
+
+  <load>
+    <arrivalphase phase="1" duration="1" unit="minute">
+      <users interarrival="1" unit="second"/>
+    </arrivalphase>
+  </load>
+
+  <sessions>
+    <session name="s" probability="100" type="ts_http">
+      <request><http url="/" method="GET" version="1.1"/></request>
+    </session>
+  </sessions>
+</tsung>
