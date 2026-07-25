@@ -312,7 +312,9 @@ monitor_plugins_test() ->
 %% The loop backoff can now come from a dynvar captured off the response
 %% (a Retry-After header, typically) instead of a value frozen at parse time.
 match_sleep_var_test() ->
-    [Dynamic|_] = read_sleep_var_matches(),
+    Dynamic = read_sleep_var_match("single"),
+    %% one name and one unit keep the pre-list shapes: a bare atom and a bare
+    %% multiplier, so nothing downstream has to learn a new shape
     ?assertEqual(ra, Dynamic#match.sleep_var),
     %% sleep_loop keeps its own unit: a 50ms static fallback...
     ?assertEqual(50, Dynamic#match.sleep_loop),
@@ -324,20 +326,72 @@ match_sleep_var_test() ->
 
 %% No sleep_var: the pre-existing static behaviour must be bit-for-bit intact.
 match_sleep_var_absent_test() ->
-    [_, Static|_] = read_sleep_var_matches(),
+    Static = read_sleep_var_match("static"),
     ?assertEqual(undefined, Static#match.sleep_var),
     ?assertEqual(2000, Static#match.sleep_loop).
 
 %% sleep_max is deliberately independent of sleep_var_unit: a millisecond
 %% sleep_var must still get the documented 60s ceiling, not a 60ms one.
 match_sleep_max_default_test() ->
-    [_, _, Defaults] = read_sleep_var_matches(),
+    Defaults = read_sleep_var_match("defaults"),
     ?assertEqual(wait, Defaults#match.sleep_var),
     ?assertEqual(1, Defaults#match.sleep_var_unit),
     ?assertEqual(60000, Defaults#match.sleep_max),
     ?assertEqual(1000, Defaults#match.sleep_loop).
 
-%% in document order: the three <match> of the fixture session
+%% Several names is an ordered preference, and each may carry its own unit:
+%% a vendor millisecond header first, the whole-second Retry-After behind it.
+match_sleep_var_list_test() ->
+    Pref = read_sleep_var_match("preference"),
+    ?assertEqual([ra_ms, ra_s], Pref#match.sleep_var),
+    ?assertEqual([1, 1000], Pref#match.sleep_var_unit),
+    %% the rest of the element is unaffected by the widening
+    ?assertEqual(50, Pref#match.sleep_loop),
+    ?assertEqual(30000, Pref#match.sleep_max).
+
+%% These lists are written to be compared by eye, so they get padded out.
+match_sleep_var_whitespace_test() ->
+    Spaced = read_sleep_var_match("spaced"),
+    ?assertEqual([ra_ms, ra_s], Spaced#match.sleep_var),
+    ?assertEqual([1, 1000], Spaced#match.sleep_var_unit).
+
+%% One unit for several names is the idiomatic "all of these are seconds";
+%% it stays a bare multiplier, and ts_search spreads it over the names.
+match_sleep_var_one_unit_test() ->
+    OneUnit = read_sleep_var_match("one_unit"),
+    ?assertEqual([ra_a, ra_b, ra_c], OneUnit#match.sleep_var),
+    ?assertEqual(1000, OneUnit#match.sleep_var_unit).
+
+%% Mismatched lengths must be parsed, not rejected: taking a whole test run
+%% down over an attribute the run may never reach is the worse failure.
+match_sleep_var_short_units_test() ->
+    Short = read_sleep_var_match("short_units"),
+    ?assertEqual([ra_a, ra_b, ra_c], Short#match.sleep_var),
+    %% stored as written; ts_search:sleep_sources/2 owns the shortfall rule
+    ?assertEqual([1, 1000], Short#match.sleep_var_unit).
+
+match_sleep_var_extra_units_test() ->
+    Extra = read_sleep_var_match("extra_units"),
+    ?assertEqual(ra_a, Extra#match.sleep_var),
+    ?assertEqual([1000, 60000, 3600000], Extra#match.sleep_var_unit).
+
+%% The DTD enumerated the legal units until sleep_var_unit became a list; a
+%% typo now reaches the parser, and must be named rather than blowing up as an
+%% unmatched clause in the unit conversion, which reports neither file nor
+%% attribute.
+match_sleep_var_bad_unit_test() ->
+    myset_env(),
+    ?assertExit({invalid_xml, _},
+                ts_config:read("./src/test/match_sleep_var_bad_unit.xml",".")).
+
+%% by name rather than by position: the fixture now holds eight <match>, and
+%% counting past seven of them to reach the eighth says nothing about what is
+%% being asserted and breaks the moment a case is inserted in the middle
+read_sleep_var_match(Name) ->
+    Matches = read_sleep_var_matches(),
+    [Match] = [ M || M <- Matches, M#match.name == Name ],
+    Match.
+
 read_sleep_var_matches() ->
     myset_env(),
     {ok, Config} = ts_config:read("./src/test/match_sleep_var.xml","."),

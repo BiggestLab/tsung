@@ -624,6 +624,31 @@ means trusting the load generator's clock against the server's. A value that
 rounds down to zero or below also falls back, so a server asking to be retried
 immediately cannot turn the loop into a busy spin.
 
+**sleep_var** also accepts a comma-separated list of variables, tried in order,
+the first usable one winning. ``Retry-After`` is whole seconds by grammar, so a
+server that wants to be retried in 50ms can only say so in a header of its own;
+listing both lets one scenario take the precise delay where it is offered and
+the coarse one where it is not. **sleep_var_unit** takes the matching list, or a
+single unit that applies to every variable:
+
+.. code-block:: xml
+
+   <request subst="true">
+     <dyn_variable name="ra_ms" header="x-retry-after-ms"/>
+     <dyn_variable name="ra_s"  header="retry-after"/>
+     <match do="loop" when="match" loop_back="0"
+            sleep_loop="50" unit="millisecond"
+            sleep_var="ra_ms,ra_s" sleep_var_unit="millisecond,second"
+            sleep_max="30" max_loop="20">retry-after</match>
+     <http url="/publish" method="POST" version="1.1" contents="..."/>
+   </request>
+
+If there are fewer units than variables, the remaining variables use the last
+unit given; surplus units are ignored. A variable that holds a usable delay ends
+the search even if **sleep_max** then caps it, or the zero rule sends it back to
+**sleep_loop**: later entries are consulted only when an earlier one says
+nothing readable.
+
 
 **Since 1.5.0**, it's now possible to add **name** attribute in **match** tag to name a record printed in match.log as follow:
 

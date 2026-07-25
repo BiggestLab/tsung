@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<!DOCTYPE tsung SYSTEM "@prefix@/share/@PACKAGE_NAME@/@DTD@">
+<!-- sleep_var_unit is a comma-separated list, so the DTD can no longer
+     enumerate the legal units and a typo gets all the way to the parser. This
+     file must be rejected with a config error naming the attribute, not with a
+     function_clause from the unit conversion. -->
+<tsung loglevel="notice" version="1.0">
+  <clients>
+    <client host="localhost" use_controller_vm="true"/>
+  </clients>
+
+  <servers>
+    <server host="localhost" port="8000" type="tcp"/>
+  </servers>
+
+  <load>
+    <arrivalphase phase="1" duration="1" unit="minute">
+      <users interarrival="1" unit="second"/>
+    </arrivalphase>
+  </load>
+
+  <sessions>
+    <session name="retry" probability="100" type="ts_http">
+      <request subst="true">
+        <dyn_variable name="ra_ms" header="x-retry-after-ms"/>
+        <dyn_variable name="ra_s" header="retry-after"/>
+        <match do="loop" when="match" loop_back="0"
+               sleep_loop="50" unit="millisecond"
+               sleep_var="ra_ms,ra_s" sleep_var_unit="millisecond,secnod"
+               max_loop="20">retry-after</match>
+        <http url="/typo" method="POST" version="1.1" contents="x"/>
+      </request>
+    </session>
+  </sessions>
+</tsung>
